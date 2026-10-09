@@ -137,7 +137,14 @@ export default function Home() {
         }),
       });
 
-      const payload = await res.json();
+      const responseText = await res.text();
+      let payload;
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        throw new Error(`Server returned a non-JSON response: ${responseText.replace(/\s+/g, " ").trim().slice(0, 220)}`);
+      }
+
       if (!res.ok) throw new Error(payload.error ?? "Search failed.");
 
       setResponse(payload);
