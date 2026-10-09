@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Market Price Estimator Preview</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="brand">
+            <div class="brand-mark" aria-hidden="true">⌕</div>
+            <div>
+              <h1 class="brand-title">Market Price Estimator</h1>
+              <p class="brand-subtitle">UK, US and EU selling price estimates from comparable sources</p>
+            </div>
+          </div>
+          <div class="download-menu">
+            <button class="btn secondary" id="downloadBtn" type="button" disabled>Download</button>
+            <div class="download-options" id="downloadOptions" hidden>
+              <button type="button" id="pdfBtn">PDF</button>
+              <button type="button" id="csvBtn">Excel CSV</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="shell">
+        <div class="workspace">
+          <section class="panel input-panel">
+            <div class="panel-header">
+              <h2 class="panel-title">Product Details</h2>
+            </div>
+            <div class="panel-body">
+              <form class="form-grid" id="searchForm">
+                <div class="field">
+                  <label for="productName">Product name</label>
+                  <input id="productName" value="tote bag" required />
+                </div>
+                <div class="field">
+                  <label for="description">Description</label>
+                  <textarea id="description" placeholder="Short product details, finish, use case, shape, pack size"></textarea>
+                </div>
+                <div class="field">
+                  <label for="material">Material</label>
+                  <input id="material" placeholder="Cotton, jute, canvas" />
+                </div>
+                <div class="field">
+                  <label for="productImage">Upload image</label>
+                  <input id="productImage" type="file" accept="image/*" />
+                  <p class="field-help">Used as a reference image. Source rows show images from matched product pages.</p>
+                  <div class="image-preview-grid" id="imagePreview"></div>
+                </div>
+                <div class="field">
+                  <label for="region">Region</label>
+                  <select id="region">
+                    <option value="US" selected>US - USD</option>
+                    <option value="UK">UK - GBP</option>
+                    <option value="EU">EU - EUR / Germany</option>
+                  </select>
+                </div>
+                <button class="btn" type="submit">Find Similar Items</button>
+              </form>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">Estimate</h2>
+            </div>
+            <div class="panel-body" id="results">
+              <div class="empty">
+                <div>
+                  <div class="empty-icon">⌕</div>
+                  <p>Enter product details and run a search to preview the frontend flow.</p>
+                  <p class="muted">This HTML preview uses sample source rows only.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const form = document.querySelector("#searchForm");
+      const results = document.querySelector("#results");
+      const imageInput = document.querySelector("#productImage");
+      const imagePreview = document.querySelector("#imagePreview");
+      const downloadBtn = document.querySelector("#downloadBtn");
+      const downloadOptions = document.querySelector("#downloadOptions");
+      const pdfBtn = document.querySelector("#pdfBtn");
+      const csvBtn = document.querySelector("#csvBtn");
+      let accepted = new Set();
+      let products = [];
+
+      const sourceImages = [
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='10' fill='%23f8faf8'/%3E%3Cpath d='M40 52c1-18 9-30 20-30s19 12 20 30' fill='none' stroke='%23e15b91' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M31 49h58l-8 45H39z' fill='%2319735d'/%3E%3Cpath d='M39 62h42M37 74h46M35 86h50' stroke='white' stroke-width='5' opacity='.7'/%3E%3C/svg%3E",
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='10' fill='%23f8faf8'/%3E%3Cpath d='M40 52c1-18 9-30 20-30s19 12 20 30' fill='none' stroke='%233aa6a6' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M31 49h58l-8 45H39z' fill='%23ad6b13'/%3E%3Cpath d='M39 62h42M37 74h46M35 86h50' stroke='white' stroke-width='5' opacity='.7'/%3E%3C/svg%3E",
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='10' fill='%23f8faf8'/%3E%3Cpath d='M40 52c1-18 9-30 20-30s19 12 20 30' fill='none' stroke='%23f0b84b' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M31 49h58l-8 45H39z' fill='%23315f8c'/%3E%3Cpath d='M39 62h42M37 74h46M35 86h50' stroke='white' stroke-width='5' opacity='.7'/%3E%3C/svg%3E"
+      ];
+
+      imageInput.addEventListener("change", () => {
+        imagePreview.innerHTML = "";
+        const file = imageInput.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        imagePreview.innerHTML = `<div class="image-preview"><img src="${url}" alt="Uploaded reference"></div><p class="image-count">1 image selected</p>`;
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const region = document.querySelector("#region").value;
+        const currency = region === "UK" ? "GBP" : region === "EU" ? "EUR" : "USD";
+        const name = document.querySelector("#productName").value || "Product";
+        products = [
+          row(name, "Amazon", "HomeStyle Direct", 16.72, currency, sourceImages[0], null),
+          row(name, "Etsy", "Thread & Loom Studio", 21.21, currency, sourceImages[1], {
+            suggestedMoq: "25 units",
+            wholesalePrice: "$12.40/unit",
+            sourceLabel: "Seller trade page",
+            sourceUrl: "https://example.com/thread-loom-wholesale"
+          }),
+          row(name, "Wayfair", "Bungalow Market", 24.84, currency, sourceImages[2], null),
+          row(name, "eBay", "UrbanCarry Outlet", 19.95, currency, sourceImages[0], {
+            suggestedMoq: "50 units",
+            wholesalePrice: "$10.75/unit",
+            sourceLabel: "Bulk order page",
+            sourceUrl: "https://example.com/urbancarry-bulk-orders"
+          }),
+          row(name, "Alibaba", "Yiwu Canvas Works", 26.92, currency, sourceImages[1], {
+            suggestedMoq: "100 units",
+            wholesalePrice: "$7.80/unit",
+            sourceLabel: "Supplier product page",
+            sourceUrl: "https://example.com/yiwu-canvas-supplier"
+          })
+        ];
+        accepted = new Set(products.map((p) => p.url));
+        render();
+        downloadBtn.disabled = false;
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        downloadOptions.hidden = !downloadOptions.hidden;
+      });
+
+      pdfBtn.addEventListener("click", () => {
+        downloadOptions.hidden = true;
+        window.print();
+      });
+
+      csvBtn.addEventListener("click", () => {
+        downloadOptions.hidden = true;
+        const header = ["Marketplace", "Seller", "Title", "Retail Price", "Currency", "Suggested MOQ", "Wholesale Price", "MOQ Source", "MOQ Source URL", "Retail Product URL"];
+        const rows = products.map((product) => [
+          product.source,
+          product.seller,
+          product.title,
+          product.price,
+          product.currency,
+          product.moq?.suggestedMoq || "Not found",
+          product.moq?.wholesalePrice || "",
+          product.moq?.sourceLabel || "",
+          product.moq?.sourceUrl || "",
+          product.url
+        ]);
+        const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "price-estimate-preview.csv";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+
+      function row(name, source, seller, price, currency, image, moq) {
+        return {
+          title: name,
+          source,
+          seller,
+          price,
+          currency,
+          image,
+          moq,
+          url: "https://example.com/product/" + encodeURIComponent(source.toLowerCase().replaceAll(" ", "-"))
+        };
+      }
+
+      function money(value, currency) {
+        return new Intl.NumberFormat("en", { style: "currency", currency }).format(value);
+      }
+
+      function render() {
+        const active = products.filter((p) => accepted.has(p.url));
+        const prices = active.map((p) => p.price);
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        const median = prices.sort((a, b) => a - b)[Math.floor(prices.length / 2)];
+        const currency = products[0].currency;
+        results.innerHTML = `
+          <div class="estimate-grid three">
+            <div class="metric"><p class="metric-label">Price range</p><p class="metric-value">${money(min, currency)} - ${money(max, currency)}</p><p class="metric-note">${active.length} accepted sources</p></div>
+            <div class="metric"><p class="metric-label">Single estimate</p><p class="metric-value">${money(median, currency)}</p><p class="metric-note">Median of accepted prices</p></div>
+            <div class="metric"><p class="metric-label">Confidence</p><p class="metric-value">Medium</p><p class="metric-note">Based on accepted matches</p></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source item</th><th>Marketplace</th><th>Seller</th><th>Price</th><th>MOQ</th><th>Open</th></tr></thead>
+              <tbody>${products.map(renderRow).join("")}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      function renderRow(product) {
+        return `
+          <tr>
+            <td><div class="source-item"><img class="product-thumb" src="${product.image}" alt="${product.title}"><div><p class="source-title">${product.title}</p><p class="source-meta">Exact product link will appear here after live search is connected.</p></div></div></td>
+            <td>${product.source}</td><td>${product.seller}</td><td>${money(product.price, product.currency)}</td><td>${renderMoq(product.moq)}</td><td><a href="${product.url}" target="_blank">Product</a></td>
+          </tr>
+        `;
+      }
+
+      function renderMoq(moq) {
+        if (!moq) return `<span class="moq-not-found">Not found</span>`;
+        return `
+          <div class="moq-cell">
+            <div><strong>Suggested MOQ:</strong> ${moq.suggestedMoq}</div>
+            <div><strong>Wholesale price:</strong> ${moq.wholesalePrice}</div>
+            <div><strong>Source:</strong> <a href="${moq.sourceUrl}" target="_blank">${moq.sourceLabel}</a></div>
+          </div>
+        `;
+      }
+    </script>
+  </body>
+</html>
