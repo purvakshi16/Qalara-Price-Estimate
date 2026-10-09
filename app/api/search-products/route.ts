@@ -154,10 +154,7 @@ async function runTinyFishSearch(
         enabled: true,
         country_code: config.countryCode,
       },
-      agent_config: {
-        max_duration_seconds: 55,
-        max_steps: 90,
-      },
+      
     }),
   });
 
