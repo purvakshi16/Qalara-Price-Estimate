@@ -154,16 +154,24 @@ async function runTinyFishSearch(
         enabled: true,
         country_code: config.countryCode,
       },
-      
     }),
   });
 
+  const text = await response.text();
+
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`TinyFish request failed: ${response.status} ${text.slice(0, 300)}`);
+    throw new Error(`TinyFish request failed: ${response.status} ${safeErrorSnippet(text)}`);
   }
 
-  return response.json();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`TinyFish returned a non-JSON response: ${safeErrorSnippet(text)}`);
+  }
+}
+
+function safeErrorSnippet(text: string) {
+  return text.replace(/\s+/g, " ").trim().slice(0, 300) || "No response body";
 }
 
 function normalizeProducts(payload: unknown, fallbackCurrency: string): ProductResult[] {
