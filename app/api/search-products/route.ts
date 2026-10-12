@@ -35,16 +35,16 @@ export async function POST(request: Request) {
     const generalParams = new URLSearchParams({ query, location: config.location, language: config.language,
       purpose: `Find retail product detail pages or relevant product listing pages for ${input.productName} sold in ${config.market}. Exclude wholesale pages and articles.`,
     });
-    const marketplaceQuery = `${query} (${config.marketplaceDomains.map((domain) => `site:${domain}`).join(" OR ")})`;
+    const marketplaceQuery = `${query} product detail (${config.marketplaceDomains.map((domain) => `site:${domain}`).join(" OR ")})`;
     const marketplaceParams = new URLSearchParams({ query: marketplaceQuery, location: config.location, language: config.language,
-      purpose: `Find matching product pages for ${input.productName} on Amazon, Etsy, eBay or Alibaba in ${config.market}.`,
+      purpose: `Find direct product-detail pages for ${input.productName} on Amazon, Etsy, eBay or Alibaba in ${config.market}. Exclude marketplace search, category, filter and collection pages.`,
     });
     const [generalSearch, marketplaceSearch] = await Promise.all([
       providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal),
       providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
     ]);
     const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url))).slice(0, GENERAL_SLOTS);
-    const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
+    const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceProductUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
     const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
     const unique = dedupeCandidates([...generalCandidates, ...marketplaceCandidates]).slice(0, MAX_PRODUCTS);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       generalSearchResults: records(generalSearch.results).length,
       marketplaceSearchResults: records(marketplaceSearch.results).length,
       directProductCandidates: dedupeCandidates(allCandidates).length,
-      marketplaceCandidatesSelected: unique.filter((row) => isMarketplaceUrl(text(row.url))).length,
+      marketplaceCandidatesSelected: unique.filter((row) => isMarketplaceProductUrl(text(row.url))).length,
       visitedLinks: unique.length,
       fetchedPages: records(fetched.results).length,
       validPricePages: products.length,
@@ -263,7 +263,7 @@ function dedupeCandidates(rows: RecordValue[]) {
   return rows.filter((row, index) => rows.findIndex((other) => text(other.url).split("#")[0] === text(row.url).split("#")[0]) === index);
 }
 function resolveUrl(value: string, base: string) { try { const url = new URL(value, base); return value && ["http:", "https:"].includes(url.protocol) ? url.toString() : ""; } catch { return ""; } }
-function hasProductPath(url: string) { return /\/(?:products?|dp|gp\/product|ip|itm|listing|p)\//i.test(new URL(url).pathname); }
+function hasProductPath(url: string) { return /\/(?:products?|product-detail|dp|gp\/product|ip|itm|listing|p)\//i.test(new URL(url).pathname); }
 function isRetailCandidateUrl(value: string) {
   try {
     const url = new URL(value);
@@ -278,6 +278,12 @@ function isListingUrl(value: string) {
 function isMarketplaceUrl(value: string) {
   const host = new URL(value).hostname.replace(/^www\./, "");
   return ["amazon.", "etsy.com", "ebay.", "alibaba.com"].some((marketplace) => host.includes(marketplace));
+}
+function isMarketplaceProductUrl(value: string) {
+  if (!isMarketplaceUrl(value) || !hasProductPath(value)) return false;
+  const url = new URL(value);
+  return !/\/(?:s|search|shop|category|categories|collections?|b)(?:\/|$)/i.test(url.pathname)
+    && !url.searchParams.has("q") && !url.searchParams.has("k") && !url.searchParams.has("_nkw");
 }
 function marketplace(value: string) {
   const host = new URL(value).hostname.replace(/^www\./, "");

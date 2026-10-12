@@ -111,6 +111,26 @@ test('reserves marketplace candidates alongside general seller pages', async () 
   assert.equal(data.searched.marketplaceCandidatesSelected, 3);
 });
 
+test('uses direct marketplace product links and rejects marketplace filter pages', async () => {
+  const marketplaceResults = [
+    { url: 'https://www.amazon.com/s?k=cotton+tote&rh=p_36%3A1000-3000', title: 'Amazon tote search' },
+    { url: 'https://www.amazon.com/dp/B0DIRECT123', title: 'Direct Amazon tote' },
+  ];
+  let fetchedUrls = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.search.tinyfish.ai') {
+      return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? marketplaceResults : [] });
+    }
+    fetchedUrls = JSON.parse(init.body).urls;
+    return Response.json({ results: [{ url: fetchedUrls[0], text: '<h1>Direct Amazon tote</h1><p>$24.00</p>' }], errors: [] });
+  });
+  const data = await (await api.POST(request())).json();
+  assert.deepEqual(fetchedUrls, ['https://www.amazon.com/dp/B0DIRECT123']);
+  assert.equal(data.displayProducts[0].productUrl, 'https://www.amazon.com/dp/B0DIRECT123');
+  assert.equal(data.searched.marketplaceCandidatesSelected, 1);
+});
+
 test('uses the lowest and highest structured product prices from a listing page', async () => {
   const listingUrl = 'https://shop.example/collections/totes';
   const listing = {

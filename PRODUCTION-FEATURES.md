@@ -19,6 +19,7 @@ This document records the functionality intended to be active in the current pro
 - Runs one general retail search and one region-aware marketplace search.
 - Selects up to four general retail/seller pages and up to three recognized marketplace pages, then deduplicates and fetches no more than seven pages in total.
 - Marketplace discovery targets Amazon, Etsy, eBay and Alibaba using the appropriate Amazon/eBay domain for the selected region.
+- Marketplace candidates must be direct product-detail URLs. Marketplace search, category, filter and collection pages are excluded from the three reserved marketplace slots.
 - For a PDP, extracts a retail price only when the page provides a usable price in the requested currency.
 - For a PLP, extracts the lowest and highest prices tied to structured product offers or repeated product-card elements in the requested currency. It does not use unrelated currency amounts elsewhere on the page.
 - Returns the specific product-detail-page link rather than a general search-results link.
