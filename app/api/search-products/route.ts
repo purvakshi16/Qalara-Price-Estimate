@@ -72,6 +72,16 @@ export async function POST(request: Request) {
     const products = normalizeProducts(tinyFishResult, config.currency);
     const pricedProducts = products.filter((product) => typeof product.price === "number").slice(0, MAX_ESTIMATE_PRODUCTS);
 
+    if (!pricedProducts.length) {
+      return NextResponse.json(
+        {
+          error:
+            "Live search completed but no priced product listings were returned. Try a simpler product name, remove extra description text, or try another region.",
+        },
+        { status: 502 },
+      );
+    }
+
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
       region: input.region,
@@ -197,7 +207,7 @@ async function pollTinyFishRun(runId: string, apiKey: string) {
     const status = stringValue(run.status).toUpperCase();
 
     if (status === "COMPLETED") {
-      return run;
+      return run.result ?? run;
     }
 
     if (status === "FAILED" || status === "CANCELLED" || status === "RUN_CREATION_FAILED") {
@@ -294,8 +304,12 @@ function extractProductsArray(payload: unknown): unknown[] {
     if (Array.isArray(resultRecord.products)) return resultRecord.products;
     if (typeof resultRecord.text === "string") return parseProductsFromText(resultRecord.text);
   }
+  if (typeof result === "string") return parseProductsFromText(result);
 
   if (typeof root.output === "string") return parseProductsFromText(root.output);
+  if (typeof root.resultJson === "string") return parseProductsFromText(root.resultJson);
+  if (typeof root.result_json === "string") return parseProductsFromText(root.result_json);
+  if (root.data && typeof root.data === "object") return extractProductsArray(root.data);
   return [];
 }
 
