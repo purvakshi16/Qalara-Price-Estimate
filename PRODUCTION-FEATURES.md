@@ -9,7 +9,9 @@ This document records the functionality intended to be active in the current pro
 - **Product name:** Required. Supplies the main retail search phrase.
 - **Description:** Optional. Adds product characteristics such as finish, shape, use case and pack size.
 - **Material:** Optional. Narrows the search to the requested material.
-- **Image:** Accepts one JPEG, PNG or WebP image up to 2 MB and displays a local preview. Reverse-image search is currently paused; the uploaded image is not yet sent to the search provider.
+- **Image:** Accepts one JPEG, PNG or WebP image up to 2 MB. When supplied, an experimental Google Lens visual-match search runs before text discovery and its candidates receive first priority.
+- The image is temporarily uploaded to public Vercel Blob storage so the visual-search provider can read it, then deleted in the API route's `finally` cleanup whether the search succeeds or fails.
+- Product name, description and optional material are sent alongside the image to improve visual-match relevance. Colour differences are allowed; material only influences the query when entered.
 - **Region and currency:** US - USD is the default. UK - GBP and EU - EUR (Germany) are also available.
 
 ## Retail Search
@@ -30,6 +32,7 @@ This document records the functionality intended to be active in the current pro
 
 - **Price range:** Lowest and highest retail prices across the usable PDPs returned by the search.
 - **Search diagnostics:** Separates general and marketplace search counts and shows direct-product candidates, selected marketplace pages, fetched pages, valid retail prices and rejected pages. Rejected-page links and reasons are listed when available.
+- Image searches also report returned and selected visual-match counts. Each displayed result has session-only Relevant / Not relevant review controls and a live accuracy percentage; this feedback is not stored.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.
 
@@ -58,7 +61,7 @@ Each result row contains:
 
 ## Currently Paused
 
-- Reverse-image search and temporary image hosting.
+- Promotion of image search to the primary required field; this remains experimental until reviewed accuracy reaches at least 60%.
 - Wholesale seller research.
 - Product-specific MOQ and wholesale-price extraction.
 - Persistent storage of searches or results.

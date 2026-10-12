@@ -3,14 +3,16 @@ const vm = require('node:vm');
 const { stripTypeScriptTypes } = require('node:module');
 const { load } = require('cheerio');
 
-function route(fetch, key = 'test-key') {
+function route(fetch, key = 'test-key', services = {}) {
   const source = fs.readFileSync('app/api/search-products/route.ts', 'utf8');
   const compiled = stripTypeScriptTypes(source).replace(/^import .*;$/gm, '').replace(/^export /gm, '') + '\nexports.POST = POST; exports.GET = GET;';
   const exports = {};
   vm.runInNewContext(compiled, {
     exports, fetch, Request, Response, URL, URLSearchParams, AbortSignal, console, load,
     NextResponse: Response, existsSync: fs.existsSync, readFileSync: fs.readFileSync,
-    join: require('node:path').join, process: { env: { TINYFISH_API_KEY: key } },
+    join: require('node:path').join, process: { env: { TINYFISH_API_KEY: key, SEARCHAPI_API_KEY: 'searchapi-test-key' } },
+    uploadReference: services.uploadReference ?? (async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' })),
+    deleteReference: services.deleteReference ?? (async () => undefined),
   });
   return exports;
 }

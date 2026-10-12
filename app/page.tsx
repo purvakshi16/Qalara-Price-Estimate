@@ -47,6 +47,8 @@ type SearchResponse = {
     maxEstimateProducts: number;
     maxDisplayedSources: number;
     imageSearchRequested: boolean;
+    visualMatchesReturned?: number;
+    visualCandidatesSelected?: number;
   };
 };
 
@@ -91,6 +93,7 @@ export default function Home() {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [searchProgress, setSearchProgress] = useState("");
   const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched" | "skipped"> | null>(null);
+  const [reviews, setReviews] = useState<Record<string, "relevant" | "not-relevant">>({});
 
   const estimate = useMemo(() => {
     const products = response?.estimateProducts ?? [];
@@ -103,6 +106,12 @@ export default function Home() {
     }
     return { currency, min: Math.min(...minimums), max: Math.max(...maximums) };
   }, [form.region, response]);
+
+  const reviewSummary = useMemo(() => {
+    const values = Object.values(reviews);
+    const relevant = values.filter((value) => value === "relevant").length;
+    return { reviewed: values.length, relevant, accuracy: values.length ? Math.round((relevant / values.length) * 100) : 0 };
+  }, [reviews]);
 
   async function handleImageChange(fileList: FileList | null) {
     const file = fileList?.[0];
@@ -129,6 +138,7 @@ export default function Home() {
     setError("");
     setLoading(true);
     setResponse(null);
+    setReviews({});
     setLastDiagnostics(null);
     setSearchProgress("Finding product pages and reading retail prices...");
 
@@ -142,6 +152,7 @@ export default function Home() {
         signal: controller.signal,
         body: JSON.stringify({
           ...form,
+          imageDataUrl: uploadedImage?.dataUrl,
         }),
       });
 
@@ -295,8 +306,8 @@ export default function Home() {
                 </div>
                 <div className="field">
                   <label htmlFor="productImages">Upload image</label>
-                  <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" disabled />
-                  <p className="field-help">Image search is paused. Retail search uses product name, description and material.</p>
+                  <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => handleImageChange(event.target.files)} />
+                  <p className="field-help">Optional experimental visual search. The temporary image is deleted after the search.</p>
                   <div className="image-preview-grid" aria-live="polite">
                     {imagePreview ? (
                       <>
@@ -349,6 +360,13 @@ export default function Home() {
 
                   <SearchDiagnostics diagnostics={lastDiagnostics} />
 
+                  {response.searched.imageSearchRequested ? (
+                    <div className="review-summary" aria-live="polite">
+                      <strong>Visual-match accuracy: {reviewSummary.reviewed ? `${reviewSummary.accuracy}%` : "Not reviewed"}</strong>
+                      <span>{reviewSummary.relevant} relevant out of {reviewSummary.reviewed} reviewed results</span>
+                    </div>
+                  ) : null}
+
                   <div className="results-header">
                     <div>
                       <h2 className="panel-title">Candidate Sources</h2>
@@ -369,6 +387,7 @@ export default function Home() {
                           <th>Seller</th>
                           <th>Price</th>
                           <th>MOQ</th>
+                          {response.searched.imageSearchRequested ? <th>Review</th> : null}
                           <th>Open</th>
                         </tr>
                       </thead>
@@ -395,6 +414,16 @@ export default function Home() {
                               <td>
                                 <span>Paused</span>
                               </td>
+                              {response.searched.imageSearchRequested ? (
+                                <td>
+                                  <div className="relevance-control" aria-label={`Review ${product.title}`}>
+                                    <button type="button" className={reviews[product.productUrl] === "relevant" ? "active" : ""}
+                                      onClick={() => setReviews((current) => ({ ...current, [product.productUrl]: "relevant" }))}>Relevant</button>
+                                    <button type="button" className={reviews[product.productUrl] === "not-relevant" ? "active" : ""}
+                                      onClick={() => setReviews((current) => ({ ...current, [product.productUrl]: "not-relevant" }))}>Not relevant</button>
+                                  </div>
+                                </td>
+                              ) : null}
                               <td>
                                 <a href={product.productUrl} target="_blank" rel="noreferrer">
                                   Product
@@ -432,6 +461,8 @@ function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, 
     <section className="diagnostics" aria-labelledby="diagnostics-title">
       <h2 id="diagnostics-title" className="panel-title">Search diagnostics</h2>
       <div className="diagnostic-grid">
+        {searched.imageSearchRequested ? <div><strong>{searched.visualMatchesReturned ?? 0}</strong><span>Visual matches returned</span></div> : null}
+        {searched.imageSearchRequested ? <div><strong>{searched.visualCandidatesSelected ?? 0}</strong><span>Visual candidates selected</span></div> : null}
         <div><strong>{searched.searchResultsReturned}</strong><span>Search results returned</span></div>
         <div><strong>{searched.generalSearchResults}</strong><span>General search results</span></div>
         <div><strong>{searched.marketplaceSearchResults}</strong><span>Marketplace search results</span></div>

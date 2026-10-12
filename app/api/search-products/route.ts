@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { load } from "cheerio";
+import { deleteReference, uploadReference } from "../../../lib/temporary-images";
 
 type Region = "UK" | "US" | "EU";
-type SearchRequest = { productName: string; description?: string; material?: string; region: Region; stage?: string };
+type SearchRequest = { productName: string; description?: string; material?: string; region: Region; stage?: string; imageDataUrl?: string };
 type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
@@ -23,6 +24,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  let cleanupReceipt = "";
   try {
     const input = await request.json() as SearchRequest;
     if (input.stage === "wholesale") return NextResponse.json({ error: "Wholesale lookup is paused." }, { status: 400 });
@@ -32,6 +34,18 @@ export async function POST(request: Request) {
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
     const signal = AbortSignal.timeout(50_000);
     const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
+    let visualSearch: RecordValue = {};
+    if (input.imageDataUrl) {
+      const searchApiKey = getSearchApiKey();
+      if (!searchApiKey) throw new Error("Set SEARCHAPI_API_KEY in the project's environment variables to use image search.");
+      const uploaded = await uploadReference(input.imageDataUrl);
+      cleanupReceipt = uploaded.receipt;
+      const params = new URLSearchParams({ engine: "google_lens", search_type: "visual_matches", url: uploaded.url,
+        q: [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 100)].filter(Boolean).join(" "),
+        country: config.location, hl: config.language,
+      });
+      visualSearch = await searchApiJson(`https://www.searchapi.io/api/v1/search?${params}`, searchApiKey, signal);
+    }
     const generalParams = new URLSearchParams({ query: `${query} product detail`, location: config.location, language: config.language,
       purpose: `Find direct retail product-detail pages for ${input.productName} sold in ${config.market}. Exclude homepages, seller profiles, search pages, categories, collections, filters, wholesale pages and articles.`,
     });
@@ -43,10 +57,12 @@ export async function POST(request: Request) {
       providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal),
       providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
     ]);
+    const visualCandidates = records(visualSearch.visual_matches).map((row) => ({ ...row, url: text(row.link), visualMatch: true,
+      sourceImage: text(asRecord(row.image).link) || text(row.thumbnail) })).filter((row) => isRetailCandidateUrl(text(row.url)));
     const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url))).slice(0, GENERAL_SLOTS);
     const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceProductUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
     const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
-    const unique = dedupeCandidates([...generalCandidates, ...marketplaceCandidates]).slice(0, MAX_PRODUCTS);
+    const unique = dedupeCandidates([...visualCandidates, ...generalCandidates, ...marketplaceCandidates]).slice(0, MAX_PRODUCTS);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
     const fetched = await providerJson("https://api.fetch.tinyfish.ai", apiKey, signal, {
       urls: unique.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 30_000,
@@ -74,7 +90,9 @@ export async function POST(request: Request) {
       rejectedPages: skipped.length,
       maxEstimateProducts: MAX_PRODUCTS,
       maxDisplayedSources: MAX_PRODUCTS,
-      imageSearchRequested: false,
+      imageSearchRequested: Boolean(input.imageDataUrl),
+      visualMatchesReturned: visualCandidates.length,
+      visualCandidatesSelected: unique.filter((row) => row.visualMatch === true).length,
     };
     if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", skipped, searched }, { status: 422 });
     return NextResponse.json({
@@ -85,6 +103,8 @@ export async function POST(request: Request) {
   } catch (error) {
     const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
     return NextResponse.json({ error: timedOut ? "The free search or page fetch timed out. No paid Agent was started." : error instanceof Error ? error.message : "Retail search failed." }, { status: 502 });
+  } finally {
+    if (cleanupReceipt) await deleteReference(cleanupReceipt).catch(() => undefined);
   }
 }
 
@@ -98,6 +118,25 @@ function getApiKey() {
   if (!existsSync(path)) return "";
   const content = readFileSync(path, "utf8");
   return content.match(/TINYFISH_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? content.match(/sk-tinyfish-[A-Za-z0-9_-]+/)?.[0] ?? "";
+}
+
+function getSearchApiKey() {
+  if (process.env.SEARCHAPI_API_KEY) return process.env.SEARCHAPI_API_KEY.trim();
+  const path = join(process.cwd(), "API keys.txt");
+  if (!existsSync(path)) return "";
+  const content = readFileSync(path, "utf8");
+  return content.match(/SEARCHAPI_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? "";
+}
+
+async function searchApiJson(url: string, key: string, signal: AbortSignal): Promise<RecordValue> {
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, signal, cache: "no-store" });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) throw new Error("SearchApi rejected SEARCHAPI_API_KEY.");
+    if (response.status === 429) throw new Error("SearchApi's free image-search allowance or rate limit was reached.");
+    throw new Error(`SearchApi image search returned HTTP ${response.status}.`);
+  }
+  try { return JSON.parse(await response.text()) as RecordValue; }
+  catch { throw new Error("SearchApi returned an unreadable image-search response."); }
 }
 
 async function providerJson(url: string, key: string, signal: AbortSignal, body?: RecordValue): Promise<RecordValue> {
@@ -118,7 +157,7 @@ async function providerJson(url: string, key: string, signal: AbortSignal, body?
 
 function extractProduct(page: RecordValue, candidate: RecordValue, currency: string): ProductResult | null {
   const url = text(page.final_url) || text(page.url);
-  if (!isDirectProductUrl(url)) return null;
+  if (candidate.visualMatch === true ? !isRetailCandidateUrl(url) : !isDirectProductUrl(url)) return null;
   const $ = load(text(page.text));
   const heading = $("h1").first().text().trim();
   const title = heading || text(page.title) || text(candidate.title);
@@ -179,6 +218,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
       const image = $("img").toArray().find((element) => terms.some((term) => ($(element).attr("alt") || "").toLowerCase().includes(term)));
       if (image) imageUrl = resolveUrl($(image).attr("src") || "", url);
     }
+    if (!imageUrl) imageUrl = text(candidate.sourceImage);
   }
   return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, moq: null, pageType: "PDP", notes: evidence };
 }

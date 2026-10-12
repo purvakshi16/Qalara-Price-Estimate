@@ -167,6 +167,32 @@ test('uses direct marketplace product links and rejects marketplace filter pages
   assert.equal(data.searched.marketplaceCandidatesSelected, 1);
 });
 
+test('prioritizes visual matches and deletes the temporary image', async () => {
+  const visualUrl = 'https://visual-shop.example/item/cotton-tote-42';
+  let deletedReceipt = '';
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'www.searchapi.io') {
+      assert.equal(parsed.searchParams.get('search_type'), 'visual_matches');
+      assert.match(parsed.searchParams.get('q'), /Cotton tote/);
+      return Response.json({ visual_matches: [{ link: visualUrl, title: 'Visual cotton tote', image: { link: 'https://visual-shop.example/tote.jpg' } }] });
+    }
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [{ url: visualUrl, text: '<h1>Visual cotton tote</h1><p>$24.00 USD</p>' }], errors: [] });
+  }, 'test-key', {
+    uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'cleanup-receipt' }),
+    deleteReference: async (receipt) => { deletedReceipt = receipt; },
+  });
+  const response = await api.POST(request('US', { imageDataUrl: 'data:image/jpeg;base64,YQ==' }));
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.displayProducts[0].productUrl, visualUrl);
+  assert.equal(data.displayProducts[0].imageUrl, 'https://visual-shop.example/tote.jpg');
+  assert.equal(data.searched.imageSearchRequested, true);
+  assert.equal(data.searched.visualCandidatesSelected, 1);
+  assert.equal(deletedReceipt, 'cleanup-receipt');
+});
+
 test('rejects a listing page containing multiple structured products', async () => {
   const listingUrl = 'https://shop.example/products/tote-collection';
   const listing = {

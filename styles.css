@@ -536,6 +536,44 @@ tr:last-child td {
   color: var(--muted);
 }
 
+.review-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: #f7faf8;
+  color: #33413c;
+  font-size: 13px;
+}
+
+.relevance-control {
+  display: inline-flex;
+  border: 1px solid #aeb8b2;
+}
+
+.relevance-control button {
+  min-height: 30px;
+  border: 0;
+  border-right: 1px solid #aeb8b2;
+  border-radius: 0;
+  padding: 5px 8px;
+  background: #ffffff;
+  color: #33413c;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.relevance-control button:last-child {
+  border-right: 0;
+}
+
+.relevance-control button.active {
+  background: #175f4f;
+  color: #ffffff;
+}
+
 @media (max-width: 940px) {
   .workspace,
   .estimate-grid {
