@@ -64,6 +64,14 @@ test('parses German decimal comma and localizes search', async () => {
   assert.equal(data.currency, 'EUR');
 });
 
+test('extracts Shopify Open Graph price metadata', async () => {
+  const html = '<meta property="og:price:currency" content="EUR"><meta property="og:price:amount" content="6,50"><meta property="og:image" content="/napkin.jpg"><h1>Cotton napkins</h1>';
+  const { api } = provider(html, { location: 'DE' });
+  const data = await (await api.POST(request('EU'))).json();
+  assert.equal(data.displayProducts[0].price, 6.5);
+  assert.equal(data.displayProducts[0].imageUrl, 'https://shop.example/napkin.jpg');
+});
+
 for (const [label, html] of [
   ['ambiguous variant prices', '<h1>Cotton tote</h1><p>$15.00</p><p>$20.00</p>'],
   ['shipping-only amount', '<h1>Cotton tote</h1><p>Shipping: $5.00</p>'],

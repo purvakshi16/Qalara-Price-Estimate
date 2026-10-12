@@ -149,9 +149,9 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     evidence = "Price from the product's listed offer.";
   }
   if (price === null) {
-    const metaCurrency = $("meta[property='product:price:currency'], meta[itemprop='priceCurrency']").first().attr("content");
+    const metaCurrency = $("meta[property='product:price:currency'], meta[property='og:price:currency'], meta[itemprop='priceCurrency']").first().attr("content");
     if (metaCurrency === currency) {
-      price = amount($("meta[property='product:price:amount'], meta[itemprop='price']").first().attr("content"));
+      price = amount($("meta[property='product:price:amount'], meta[property='og:price:amount'], meta[itemprop='price']").first().attr("content"));
       if (price !== null) evidence = "Price from product page metadata.";
     }
   }
