@@ -11,6 +11,8 @@ type SearchRequest = {
   region: Region;
   imageName?: string;
   imageDataUrl?: string;
+  stage?: "retail" | "wholesale";
+  products?: ProductResult[];
 };
 
 type ProductResult = {
@@ -39,11 +41,9 @@ const regionConfig: Record<Region, { currency: string; countryCode: "GB" | "US" 
   EU: { currency: "EUR", countryCode: "DE", market: "Germany / EU" },
 };
 
-const MAX_VISIT = 15;
-const MAX_ESTIMATE_PRODUCTS = 10;
-const MAX_DISPLAY_PRODUCTS = 6;
-const TINYFISH_POLL_TIMEOUT_MS = 50_000;
-const TINYFISH_POLL_INTERVAL_MS = 3_000;
+const MAX_VISIT = 2;
+const MAX_ESTIMATE_PRODUCTS = 2;
+const MAX_DISPLAY_PRODUCTS = 2;
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -68,7 +68,37 @@ export async function POST(request: Request) {
       );
     }
 
-    const tinyFishResult = await runTinyFishSearch(input, config, apiKey);
+    const runId = await runTinyFishSearch(input, config, apiKey);
+    return NextResponse.json({ runId, status: "RUNNING" }, { status: 202 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Live product search failed." }, { status: 500 });
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const runId = url.searchParams.get("runId");
+    const region = (url.searchParams.get("region") ?? "US") as Region;
+    const config = regionConfig[region] ?? regionConfig.US;
+    if (!runId || !/^[a-zA-Z0-9_-]+$/.test(runId)) {
+      return NextResponse.json({ error: "A valid search run ID is required." }, { status: 400 });
+    }
+    const apiKey = getTinyFishApiKey();
+    if (!apiKey) throw new Error("TinyFish API key is not configured.");
+    const run = await pollTinyFishRun(runId, apiKey);
+    if (stringValue(run.status).toUpperCase() !== "COMPLETED") {
+      return NextResponse.json({ runId, status: run.status ?? "RUNNING" }, { status: 202 });
+    }
+    const tinyFishResult = run.result ?? run;
+    if (url.searchParams.get("stage") === "wholesale") {
+      const evidence = extractProductsArray(tinyFishResult).map((item) => {
+        const record = item as Record<string, unknown>;
+        const productUrl = stringValue(record.productUrl);
+        return { productUrl, moq: normalizeMoq(record.moq, productUrl) };
+      });
+      return NextResponse.json({ evidence });
+    }
     const products = normalizeProducts(tinyFishResult, config.currency);
     const pricedProducts = products.filter((product) => typeof product.price === "number").slice(0, MAX_ESTIMATE_PRODUCTS);
 
@@ -84,13 +114,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
-      region: input.region,
+      region,
       currency: config.currency,
       searched: {
         maxVisitedLinks: MAX_VISIT,
         maxEstimateProducts: MAX_ESTIMATE_PRODUCTS,
         maxDisplayedSources: MAX_DISPLAY_PRODUCTS,
-        imageSearchRequested: Boolean(input.imageDataUrl || input.imageName),
+        imageSearchRequested: false,
       },
       estimateProducts: pricedProducts,
       displayProducts: pricedProducts.slice(0, MAX_DISPLAY_PRODUCTS),
@@ -128,16 +158,23 @@ async function runTinyFishSearch(
     input.description ? `Description: ${input.description}.` : "",
     input.material ? `Material: ${input.material}.` : "",
     `Market/region: ${config.market}. Currency should be ${config.currency}.`,
-    input.imageName
-      ? `The user uploaded a reference image named "${input.imageName}". Use visual-search style matching where possible from the product name and image filename context.`
-      : "No reference image was provided; use product name, description, and material.",
+    "Use product name, description and material. Do not infer appearance from filenames.",
     `Visit up to ${MAX_VISIT} candidate product links, not just search result pages.`,
     `Return up to ${MAX_ESTIMATE_PRODUCTS} real product listings with exact product page URLs.`,
     "Include only listings where the URL is a direct product/detail page, not a general search page.",
     "For each retail listing, extract title, numeric retail price, currency, seller/store name from the product detail page, marketplace/platform name, product URL, product image URL, and a similarity score from 0-100.",
     "Marketplace means the website or platform hosting the product, such as Amazon, eBay, Alibaba, Etsy, Wayfair, or a retailer website.",
     "Seller means the actual seller, store, brand, or vendor field shown on that product detail page. Do not repeat the marketplace name as seller unless no seller field is visible.",
-    "For each seller, separately investigate MOQ and wholesale price evidence.",
+    "Return moq as null in this retail stage. Finish once the two priced product pages have been checked; wholesale research is a separate stage.",
+    "Amazon may be included only if it naturally appears in the search results. Do not log in to Amazon.",
+    "Return strict JSON with a top-level products array.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const wholesaleGoal = [
+    `Research seller wholesale evidence for these retail matches: ${JSON.stringify(input.products?.slice(0, 2) ?? [])}.`,
+    "Visit at most two relevant seller wholesale pages. Return one entry per supplied product with its original productUrl and moq object or null. Do not return replacement retail products.",
     "MOQ evidence must be product-specific or product-category-specific for the same or clearly similar product. Do not infer MOQ from seller type alone.",
     "Allowed MOQ sources are seller wholesale pages, trade pages, B2B pages, bulk-order pages, supplier profiles, or wholesale listings that show product-relevant MOQ or wholesale pricing.",
     "The MOQ sourceUrl must point to the seller's listed wholesale, bulk, trade, B2B, supplier, or product-category wholesale page.",
@@ -160,7 +197,7 @@ async function runTinyFishSearch(
     },
     body: JSON.stringify({
       url: "https://www.google.com/search?tbm=shop",
-      goal,
+      goal: input.stage === "wholesale" ? wholesaleGoal : goal,
       browser_profile: "lite",
       proxy_config: {
         enabled: true,
@@ -182,19 +219,16 @@ async function runTinyFishSearch(
     throw new Error(`TinyFish did not return a run id: ${safeErrorSnippet(startText)}`);
   }
 
-  return pollTinyFishRun(runId, apiKey);
+  return runId;
 }
 
 async function pollTinyFishRun(runId: string, apiKey: string) {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < TINYFISH_POLL_TIMEOUT_MS) {
-    await sleep(TINYFISH_POLL_INTERVAL_MS);
-
     const response = await fetch(`https://agent.tinyfish.ai/v1/runs/${encodeURIComponent(runId)}`, {
       headers: {
         "X-API-Key": apiKey,
       },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
     });
 
     const text = await response.text();
@@ -207,16 +241,14 @@ async function pollTinyFishRun(runId: string, apiKey: string) {
     const status = stringValue(run.status).toUpperCase();
 
     if (status === "COMPLETED") {
-      return run.result ?? run;
+      return run;
     }
 
     if (status === "FAILED" || status === "CANCELLED" || status === "RUN_CREATION_FAILED") {
       const error = typeof run.error === "string" ? run.error : JSON.stringify(run.error ?? {});
       throw new Error(`TinyFish run ${status.toLowerCase()}: ${safeErrorSnippet(error)}`);
     }
-  }
-
-  throw new Error("TinyFish search is still running. Please try again with a simpler product name or retry in a moment.");
+    return run;
 }
 
 function parseJsonOrThrow(text: string, label: string) {
@@ -229,10 +261,6 @@ function parseJsonOrThrow(text: string, label: string) {
 
 function safeErrorSnippet(text: string) {
   return text.replace(/\s+/g, " ").trim().slice(0, 300) || "No response body";
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeProducts(payload: unknown, fallbackCurrency: string): ProductResult[] {
