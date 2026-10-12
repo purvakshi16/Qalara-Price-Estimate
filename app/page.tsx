@@ -36,11 +36,14 @@ type SearchResponse = {
   searched: {
     maxVisitedLinks: number;
     searchResultsReturned: number;
+    generalSearchResults: number;
+    marketplaceSearchResults: number;
     directProductCandidates: number;
     visitedLinks: number;
     fetchedPages: number;
     validPricePages: number;
     rejectedPages: number;
+    marketplaceCandidatesSelected: number;
     maxEstimateProducts: number;
     maxDisplayedSources: number;
     imageSearchRequested: boolean;
@@ -430,8 +433,11 @@ function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, 
       <h2 id="diagnostics-title" className="panel-title">Search diagnostics</h2>
       <div className="diagnostic-grid">
         <div><strong>{searched.searchResultsReturned}</strong><span>Search results returned</span></div>
+        <div><strong>{searched.generalSearchResults}</strong><span>General search results</span></div>
+        <div><strong>{searched.marketplaceSearchResults}</strong><span>Marketplace search results</span></div>
         <div><strong>{searched.directProductCandidates}</strong><span>Direct product candidates</span></div>
         <div><strong>{searched.visitedLinks}</strong><span>Pages selected</span></div>
+        <div><strong>{searched.marketplaceCandidatesSelected}</strong><span>Marketplace pages selected</span></div>
         <div><strong>{searched.fetchedPages}</strong><span>Pages fetched</span></div>
         <div><strong>{searched.validPricePages}</strong><span>Valid retail prices</span></div>
         <div><strong>{searched.rejectedPages}</strong><span>Rejected pages</span></div>

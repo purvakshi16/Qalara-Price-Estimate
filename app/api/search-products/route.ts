@@ -12,11 +12,13 @@ type ProductResult = {
   minPrice: number; maxPrice: number; pageType: "PDP" | "PLP";
 };
 const regions = {
-  US: { currency: "USD", location: "US", language: "en", market: "United States" },
-  UK: { currency: "GBP", location: "GB", language: "en", market: "United Kingdom" },
-  EU: { currency: "EUR", location: "DE", language: "de", market: "Germany" },
+  US: { currency: "USD", location: "US", language: "en", market: "United States", marketplaceDomains: ["amazon.com", "etsy.com", "ebay.com", "alibaba.com"] },
+  UK: { currency: "GBP", location: "GB", language: "en", market: "United Kingdom", marketplaceDomains: ["amazon.co.uk", "etsy.com", "ebay.co.uk", "alibaba.com"] },
+  EU: { currency: "EUR", location: "DE", language: "de", market: "Germany", marketplaceDomains: ["amazon.de", "etsy.com", "ebay.de", "alibaba.com"] },
 };
 const MAX_PRODUCTS = 7;
+const GENERAL_SLOTS = 4;
+const MARKETPLACE_SLOTS = 3;
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -30,13 +32,21 @@ export async function POST(request: Request) {
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
     const signal = AbortSignal.timeout(50_000);
     const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
-    const params = new URLSearchParams({ query, location: config.location, language: config.language,
+    const generalParams = new URLSearchParams({ query, location: config.location, language: config.language,
       purpose: `Find retail product detail pages or relevant product listing pages for ${input.productName} sold in ${config.market}. Exclude wholesale pages and articles.`,
     });
-    const search = await providerJson(`https://api.search.tinyfish.ai?${params}`, apiKey, signal);
-    const candidates = records(search.results).filter((row) => isRetailCandidateUrl(text(row.url)))
-      .sort((a, b) => Number(hasProductPath(text(b.url))) - Number(hasProductPath(text(a.url))));
-    const unique = candidates.filter((row, index, rows) => rows.findIndex((other) => text(other.url).split("#")[0] === text(row.url).split("#")[0]) === index).slice(0, MAX_PRODUCTS);
+    const marketplaceQuery = `${query} (${config.marketplaceDomains.map((domain) => `site:${domain}`).join(" OR ")})`;
+    const marketplaceParams = new URLSearchParams({ query: marketplaceQuery, location: config.location, language: config.language,
+      purpose: `Find matching product pages for ${input.productName} on Amazon, Etsy, eBay or Alibaba in ${config.market}.`,
+    });
+    const [generalSearch, marketplaceSearch] = await Promise.all([
+      providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal),
+      providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
+    ]);
+    const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url))).slice(0, GENERAL_SLOTS);
+    const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
+    const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
+    const unique = dedupeCandidates([...generalCandidates, ...marketplaceCandidates]).slice(0, MAX_PRODUCTS);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
     const fetched = await providerJson("https://api.fetch.tinyfish.ai", apiKey, signal, {
       urls: unique.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 30_000,
@@ -53,8 +63,11 @@ export async function POST(request: Request) {
     }
     const searched = {
       maxVisitedLinks: MAX_PRODUCTS,
-      searchResultsReturned: records(search.results).length,
-      directProductCandidates: candidates.length,
+      searchResultsReturned: records(generalSearch.results).length + records(marketplaceSearch.results).length,
+      generalSearchResults: records(generalSearch.results).length,
+      marketplaceSearchResults: records(marketplaceSearch.results).length,
+      directProductCandidates: dedupeCandidates(allCandidates).length,
+      marketplaceCandidatesSelected: unique.filter((row) => isMarketplaceUrl(text(row.url))).length,
       visitedLinks: unique.length,
       fetchedPages: records(fetched.results).length,
       validPricePages: products.length,
@@ -242,6 +255,13 @@ function schemaProducts(value: unknown): RecordValue[] {
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
 function asRecord(value: unknown): RecordValue { return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {}; }
 function records(value: unknown): RecordValue[] { return Array.isArray(value) ? value.filter((item) => item && typeof item === "object" && !Array.isArray(item)) : []; }
+function rankedCandidates(search: RecordValue) {
+  return records(search.results).filter((row) => isRetailCandidateUrl(text(row.url)))
+    .sort((a, b) => Number(hasProductPath(text(b.url))) - Number(hasProductPath(text(a.url))));
+}
+function dedupeCandidates(rows: RecordValue[]) {
+  return rows.filter((row, index) => rows.findIndex((other) => text(other.url).split("#")[0] === text(row.url).split("#")[0]) === index);
+}
 function resolveUrl(value: string, base: string) { try { const url = new URL(value, base); return value && ["http:", "https:"].includes(url.protocol) ? url.toString() : ""; } catch { return ""; } }
 function hasProductPath(url: string) { return /\/(?:products?|dp|gp\/product|ip|itm|listing|p)\//i.test(new URL(url).pathname); }
 function isRetailCandidateUrl(value: string) {
@@ -254,6 +274,10 @@ function isRetailCandidateUrl(value: string) {
 function isListingUrl(value: string) {
   const url = new URL(value);
   return /\/(?:search|collections?|category|categories|catalog|shop)(?:\/|$)/i.test(url.pathname) || url.searchParams.has("q") || url.searchParams.has("s");
+}
+function isMarketplaceUrl(value: string) {
+  const host = new URL(value).hostname.replace(/^www\./, "");
+  return ["amazon.", "etsy.com", "ebay.", "alibaba.com"].some((marketplace) => host.includes(marketplace));
 }
 function marketplace(value: string) {
   const host = new URL(value).hostname.replace(/^www\./, "");

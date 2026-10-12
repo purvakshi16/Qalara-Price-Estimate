@@ -12,7 +12,8 @@ function provider(html, options = {}) {
     assert.ok(['api.search.tinyfish.ai', 'api.fetch.tinyfish.ai'].includes(host), 'No paid provider endpoint may be called');
     if (host === 'api.search.tinyfish.ai') {
       assert.equal(new URL(endpoint).searchParams.get('location'), options.location ?? 'US');
-      return Response.json({ results: options.results ?? [{ url, title: 'Cotton tote' }] });
+      const marketplaceSearch = new URL(endpoint).searchParams.get('query').includes('site:amazon');
+      return Response.json({ results: marketplaceSearch ? (options.marketplaceResults ?? []) : (options.results ?? [{ url, title: 'Cotton tote' }]) });
     }
     const body = JSON.parse(init.body);
     assert.ok(body.urls.length <= 7);
@@ -31,7 +32,7 @@ test('Search then Fetch yields visible retail price without an image or seller',
   assert.equal(data.displayProducts[0].seller, 'Not listed');
   assert.equal(data.displayProducts[0].imageUrl, '');
   assert.equal(data.providerMode, 'search-fetch');
-  assert.deepEqual(calls, ['api.search.tinyfish.ai', 'api.fetch.tinyfish.ai']);
+  assert.deepEqual(calls, ['api.search.tinyfish.ai', 'api.search.tinyfish.ai', 'api.fetch.tinyfish.ai']);
 });
 
 test('uses explicit seller and product image from structured offer', async () => {
@@ -85,7 +86,29 @@ test('keeps successful page when another page is blocked', async () => {
 test('filters search-engine links without fetching them', async () => {
   const { api, calls } = provider('', { results: [{ url: 'https://google.com/search?q=totes' }] });
   assert.equal((await api.POST(request())).status, 422);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
+});
+
+test('reserves marketplace candidates alongside general seller pages', async () => {
+  const sellerUrls = Array.from({ length: 5 }, (_, index) => ({ url: `https://seller${index}.example/products/tote`, title: `Seller tote ${index}` }));
+  const marketplaceUrls = [
+    { url: 'https://www.amazon.com/dp/ABC123', title: 'Amazon tote' },
+    { url: 'https://www.etsy.com/listing/123/tote', title: 'Etsy tote' },
+    { url: 'https://www.ebay.com/itm/456', title: 'eBay tote' },
+  ];
+  let fetchedUrls = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.search.tinyfish.ai') {
+      return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? marketplaceUrls : sellerUrls });
+    }
+    fetchedUrls = JSON.parse(init.body).urls;
+    return Response.json({ results: fetchedUrls.map((pageUrl) => ({ url: pageUrl, text: '<h1>Tote</h1><p>$20.00</p>' })), errors: [] });
+  });
+  const data = await (await api.POST(request())).json();
+  assert.equal(fetchedUrls.length, 7);
+  assert.equal(fetchedUrls.filter((pageUrl) => /amazon|etsy|ebay/.test(pageUrl)).length, 3);
+  assert.equal(data.searched.marketplaceCandidatesSelected, 3);
 });
 
 test('uses the lowest and highest structured product prices from a listing page', async () => {
@@ -116,7 +139,7 @@ test('stops at allowance error with no retries or paid fallback', async () => {
   const response = await api.POST(request());
   assert.equal(response.status, 502);
   assert.match((await response.json()).error, /allowance/);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 });
 
 test('wholesale and old run requests cannot reach a paid endpoint', async () => {
