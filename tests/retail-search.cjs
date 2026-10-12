@@ -72,6 +72,18 @@ test('extracts Shopify Open Graph price metadata', async () => {
   assert.equal(data.displayProducts[0].imageUrl, 'https://shop.example/napkin.jpg');
 });
 
+test('extracts a requested-currency price from a primary PDP price element', async () => {
+  const { api } = provider('<h1>Cotton tote</h1><div class="price__regular"><span class="price-item--regular">Regular price $19.99 USD</span></div>');
+  const data = await (await api.POST(request())).json();
+  assert.equal(data.displayProducts[0].price, 19.99);
+  assert.match(data.displayProducts[0].notes, /primary price element/);
+});
+
+test('does not use a related-product card price as the PDP price', async () => {
+  const { api } = provider('<h1>Cotton tote</h1><section class="related-products"><article class="product-card"><span class="price-item--regular">$19.99</span></article></section>');
+  assert.equal((await api.POST(request())).status, 422);
+});
+
 for (const [label, html] of [
   ['ambiguous variant prices', '<h1>Cotton tote</h1><p>$15.00</p><p>$20.00</p>'],
   ['shipping-only amount', '<h1>Cotton tote</h1><p>Shipping: $5.00</p>'],

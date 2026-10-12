@@ -155,6 +155,10 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
       if (price !== null) evidence = "Price from product page metadata.";
     }
   }
+  if (price === null) {
+    price = visiblePdpPrice($, currency);
+    if (price !== null) evidence = "Price from the product page's primary price element.";
+  }
   if (price === null) return null;
   $("script,style,nav,header,footer,aside,del,s,[aria-hidden='true']").remove();
   $("p,div,section,h1,h2,h3,li,br").before("\n").after("\n");
@@ -184,6 +188,34 @@ function amount(value: unknown): number | null {
     ? raw.slice(0, separator).replace(/[.,]/g, "") + "." + raw.slice(separator + 1) : raw.replace(/[.,]/g, "");
   const price = Number(normalized);
   return Number.isFinite(price) && price > 0 ? price : null;
+}
+function visiblePdpPrice($: ReturnType<typeof load>, currency: string): number | null {
+  const selectors = [
+    "[data-product-price]", "[data-product-price-final]", "[itemprop='offers'] [itemprop='price']",
+    ".price-item--sale", ".price__sale .price-item", ".price-item--regular", ".price__regular .price-item",
+    ".product__price", ".product-price", "#price_inside_buybox", "#priceblock_ourprice", "#priceblock_dealprice",
+    "#corePrice_feature_div .a-price .a-offscreen", ".x-price-primary .ux-textspans",
+  ];
+  for (const selector of selectors) {
+    const prices = $(selector).toArray().filter((element) => {
+      const ancestry = $(element).parents().addBack().map((_, node) => `${$(node).attr("id") ?? ""} ${$(node).attr("class") ?? ""}`).get().join(" ");
+      return !$(element).is("del,s") && !$(element).parents("del,s,nav,footer,aside").length
+        && !/(?:related|recommend|recently|also-like|card--product|product-card)/i.test(ancestry);
+    }).flatMap((element) => currencyAmounts($(element).attr("content") || $(element).text(), currency));
+    const unique = [...new Set(prices)];
+    if (unique.length === 1) return unique[0];
+  }
+  return null;
+}
+function currencyAmounts(value: string, currency: string): number[] {
+  const explicitCodes = value.toUpperCase().match(/\b(?:USD|EUR|GBP|CAD|AUD|INR)\b/g) ?? [];
+  if (explicitCodes.some((code) => code !== currency)) return [];
+  const token = currency === "USD" ? "(?:US\\$|\\$|USD)" : currency === "EUR" ? "(?:€|EUR)" : "(?:£|GBP)";
+  const matches = [
+    ...value.matchAll(new RegExp(`${token}\\s*([0-9]+(?:[.,][0-9]{1,2})?)`, "gi")),
+    ...value.matchAll(new RegExp(`([0-9]+(?:[.,][0-9]{1,2})?)\\s*${token}`, "gi")),
+  ];
+  return matches.map((match) => amount(match[1])).filter((price): price is number => price !== null);
 }
 function schemaProducts(value: unknown): RecordValue[] {
   if (Array.isArray(value)) return value.flatMap(schemaProducts);
