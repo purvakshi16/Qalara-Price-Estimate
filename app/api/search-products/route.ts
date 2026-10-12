@@ -9,7 +9,7 @@ type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
   productUrl: string; imageUrl: string; similarity: number; moq: null; notes: string;
-  minPrice: number; maxPrice: number; pageType: "PDP" | "PLP";
+  minPrice: number; maxPrice: number; pageType: "PDP";
 };
 const regions = {
   US: { currency: "USD", location: "US", language: "en", market: "United States", marketplaceDomains: ["amazon.com", "etsy.com", "ebay.com", "alibaba.com"] },
@@ -32,8 +32,8 @@ export async function POST(request: Request) {
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
     const signal = AbortSignal.timeout(50_000);
     const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
-    const generalParams = new URLSearchParams({ query, location: config.location, language: config.language,
-      purpose: `Find retail product detail pages or relevant product listing pages for ${input.productName} sold in ${config.market}. Exclude wholesale pages and articles.`,
+    const generalParams = new URLSearchParams({ query: `${query} product detail`, location: config.location, language: config.language,
+      purpose: `Find direct retail product-detail pages for ${input.productName} sold in ${config.market}. Exclude homepages, seller profiles, search pages, categories, collections, filters, wholesale pages and articles.`,
     });
     const marketplaceQuery = `${query} product detail (${config.marketplaceDomains.map((domain) => `site:${domain}`).join(" OR ")})`;
     const marketplaceParams = new URLSearchParams({ query: marketplaceQuery, location: config.location, language: config.language,
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal),
       providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
     ]);
-    const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url))).slice(0, GENERAL_SLOTS);
+    const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url))).slice(0, GENERAL_SLOTS);
     const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceProductUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
     const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
     const unique = dedupeCandidates([...generalCandidates, ...marketplaceCandidates]).slice(0, MAX_PRODUCTS);
@@ -118,68 +118,33 @@ async function providerJson(url: string, key: string, signal: AbortSignal, body?
 
 function extractProduct(page: RecordValue, candidate: RecordValue, currency: string): ProductResult | null {
   const url = text(page.final_url) || text(page.url);
-  if (!isRetailCandidateUrl(url)) return null;
+  if (!isDirectProductUrl(url)) return null;
   const $ = load(text(page.text));
   const heading = $("h1").first().text().trim();
   const title = heading || text(page.title) || text(candidate.title);
-  const listingProductPrices: number[] = [];
-  let listingImage = "";
-  let schemaProductCount = 0;
+  const structuredProducts: RecordValue[] = [];
   for (const element of $('script[type="application/ld+json"]').toArray()) {
     let json: unknown;
     try { json = JSON.parse($(element).text()); } catch { continue; }
-    const listedProducts = schemaProducts(json);
-    schemaProductCount += listedProducts.length;
-    for (const product of listedProducts) {
-      const offers = Array.isArray(product.offers) ? records(product.offers) : records([product.offers]);
-      for (const offer of offers) {
-        if (text(offer.priceCurrency).toUpperCase() !== currency) continue;
-        const offerPrice = amount(offer.price);
-        if (offerPrice !== null) listingProductPrices.push(offerPrice);
-      }
-      if (!listingImage) {
-        const image = Array.isArray(product.image) ? product.image[0] : product.image;
-        listingImage = resolveUrl(typeof image === "string" ? image : text(asRecord(image).url), url);
-      }
-    }
+    structuredProducts.push(...schemaProducts(json));
   }
-  const listingCards = $('[itemtype*="Product"], .product-card, [class*="product-card"], [class*="product-item"], [data-product-id]').toArray();
-  for (const card of listingCards) {
-    const found = visiblePrice($(card).text().replace(/\s+/g, " "), currency);
-    if (found) listingProductPrices.push(found.price);
-  }
-  const listingPrices = [...new Set(listingProductPrices)];
-  if ((isListingUrl(url) || schemaProductCount > 1) && listingPrices.length) {
-    const minPrice = Math.min(...listingPrices);
-    const maxPrice = Math.max(...listingPrices);
-    return {
-      title: title || `${marketplace(url)} product listing`, price: minPrice, minPrice, maxPrice,
-      currency, seller: "Not listed", marketplace: marketplace(url), productUrl: url,
-      imageUrl: listingImage, similarity: 0, moq: null, pageType: "PLP",
-      notes: `Listing page range from ${listingPrices.length} priced product entr${listingPrices.length === 1 ? "y" : "ies"}.`,
-    };
-  }
+  if (structuredProducts.length > 1) return null;
   let price: number | null = null;
   let seller = "Not listed";
   let imageUrl = "";
   let evidence = "";
-  for (const element of $('script[type="application/ld+json"]').toArray()) {
-    let json: unknown;
-    try { json = JSON.parse($(element).text()); } catch { continue; }
-    for (const product of schemaProducts(json)) {
-      const offers = Array.isArray(product.offers) ? records(product.offers) : records([product.offers]);
-      const valid = offers.filter((offer) => text(offer.priceCurrency).toUpperCase() === currency && amount(offer.price) !== null);
-      const prices = [...new Set(valid.map((offer) => amount(offer.price)))];
-      if (prices.length !== 1) continue;
-      price = prices[0];
-      const sellerRecord = valid[0].seller;
-      seller = typeof sellerRecord === "string" ? sellerRecord : text(asRecord(sellerRecord).name) || "Not listed";
-      const image = Array.isArray(product.image) ? product.image[0] : product.image;
-      imageUrl = resolveUrl(typeof image === "string" ? image : text(asRecord(image).url), url);
-      evidence = "Price from the product's listed offer.";
-      break;
-    }
-    if (price !== null) break;
+  for (const product of structuredProducts) {
+    const offers = Array.isArray(product.offers) ? records(product.offers) : records([product.offers]);
+    const valid = offers.filter((offer) => text(offer.priceCurrency).toUpperCase() === currency && amount(offer.price) !== null);
+    const prices = [...new Set(valid.map((offer) => amount(offer.price)))];
+    if (prices.length !== 1) continue;
+    price = prices[0];
+    const sellerRecord = valid[0].seller;
+    seller = typeof sellerRecord === "string" ? sellerRecord : text(asRecord(sellerRecord).name) || "Not listed";
+    const image = Array.isArray(product.image) ? product.image[0] : product.image;
+    imageUrl = resolveUrl(typeof image === "string" ? image : text(asRecord(image).url), url);
+    evidence = "Price from the product's listed offer.";
+    break;
   }
   if (price === null) {
     const metaCurrency = $("meta[property='product:price:currency'], meta[itemprop='priceCurrency']").first().attr("content");
@@ -188,6 +153,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
       if (price !== null) evidence = "Price from product page metadata.";
     }
   }
+  if (price === null) return null;
   $("script,style,nav,header,footer,aside,del,s,[aria-hidden='true']").remove();
   $("p,div,section,h1,h2,h3,li,br").before("\n").after("\n");
   const lines = $.root().text().split(/\n+/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
@@ -195,12 +161,6 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   const primary = lines.slice(Math.max(0, start), Math.max(0, start) + 100);
   const stop = primary.findIndex((line) => /you may also|related products|recommended products|customers also|recently viewed/i.test(line));
   const content = (stop >= 0 ? primary.slice(0, stop) : primary).join("\n").slice(0, 5000);
-  if (price === null) {
-    const found = visiblePrice(content, currency);
-    if (!found) return null;
-    price = found.price;
-    evidence = `Visible retail price: ${found.evidence}`;
-  }
   if (seller === "Not listed") seller = content.match(/(?:sold by|seller|verkauft von)\s*[:\-]?\s*([^\n]{2,100})/i)?.[1]?.trim() || "Not listed";
   if (!imageUrl) {
     imageUrl = resolveUrl($("meta[property='og:image']").first().attr("content") || "", url);
@@ -211,28 +171,6 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     }
   }
   return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, moq: null, pageType: "PDP", notes: evidence };
-}
-
-function visiblePrice(content: string, currency: string): { price: number; evidence: string } | null {
-  const number = "([0-9]+(?:[.,][0-9]+)*)";
-  const patterns: Record<string, RegExp> = {
-    USD: new RegExp(`(?<![A-Za-z])(?:US\\$|USD\\s*\\$?|\\$)\\s*${number}`, "g"),
-    GBP: new RegExp(`(?:GBP\\s*|£\\s*)${number}`, "g"),
-    EUR: new RegExp(`(?:€|EUR)\\s*${number}|${number}\\s*(?:€|EUR)`, "g"),
-  };
-  const hits: { price: number; evidence: string; current: boolean }[] = [];
-  for (const match of content.matchAll(patterns[currency])) {
-    const before = content.slice(Math.max(0, match.index! - 50), match.index);
-    const after = content.slice(match.index! + match[0].length, match.index! + match[0].length + 40);
-    const price = amount(match[1] ?? match[2]);
-    if (price === null || /(?:shipping|delivery|save|saving|discount|was|original|list price|installment|per month|from|starting at|versand|lieferung)\s*[:\-]?\s*$/i.test(before)) continue;
-    if (/^\s*(?:\/month|per month|monthly|shipping|delivery|off\b|[–-]\s*[$£€\d])/i.test(after)) continue;
-    if (currency === "USD" && /(?:CAD|AUD|NZD|CA|AU|NZ)\s*$/.test(before)) continue;
-    if (/[$£€]\s*\d[\d.,]*\s*(?:[–-]|to)\s*$/i.test(before)) continue;
-    hits.push({ price, evidence: match[0], current: /(?:sale price|current price|our price|now|angebotspreis)\s*[:\-]?\s*$/i.test(before) });
-  }
-  const preferred = hits.some((hit) => hit.current) ? hits.filter((hit) => hit.current) : hits;
-  return new Set(preferred.map((hit) => hit.price)).size === 1 ? preferred[0] : null;
 }
 
 function amount(value: unknown): number | null {
@@ -275,12 +213,15 @@ function isListingUrl(value: string) {
   const url = new URL(value);
   return /\/(?:search|collections?|category|categories|catalog|shop)(?:\/|$)/i.test(url.pathname) || url.searchParams.has("q") || url.searchParams.has("s");
 }
+function isDirectProductUrl(value: string) {
+  return isRetailCandidateUrl(value) && hasProductPath(value) && !isListingUrl(value);
+}
 function isMarketplaceUrl(value: string) {
   const host = new URL(value).hostname.replace(/^www\./, "");
   return ["amazon.", "etsy.com", "ebay.", "alibaba.com"].some((marketplace) => host.includes(marketplace));
 }
 function isMarketplaceProductUrl(value: string) {
-  if (!isMarketplaceUrl(value) || !hasProductPath(value)) return false;
+  if (!isMarketplaceUrl(value) || !isDirectProductUrl(value)) return false;
   const url = new URL(value);
   return !/\/(?:s|search|shop|category|categories|collections?|b)(?:\/|$)/i.test(url.pathname)
     && !url.searchParams.has("q") && !url.searchParams.has("k") && !url.searchParams.has("_nkw");
@@ -288,5 +229,5 @@ function isMarketplaceProductUrl(value: string) {
 function marketplace(value: string) {
   const host = new URL(value).hostname.replace(/^www\./, "");
   const known: Record<string, string> = { amazon: "Amazon", ebay: "eBay", etsy: "Etsy", alibaba: "Alibaba", walmart: "Walmart" };
-  return Object.entries(known).find(([name]) => host === `${name}.com` || host.startsWith(`${name}.`))?.[1] ?? host;
+  return Object.entries(known).find(([name]) => host === `${name}.com` || host.startsWith(`${name}.`))?.[1] ?? "Seller website";
 }

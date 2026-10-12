@@ -14,20 +14,21 @@ This document records the functionality intended to be active in the current pro
 
 ## Retail Search
 
-- Uses the product name, description, material and selected region to search for retail product-detail pages (PDPs) and relevant product-listing pages (PLPs).
+- Uses the product name, description, material and selected region to search only for direct retail product-detail pages (PDPs).
 - Uses free search and page-fetch operations only. Paid browser-agent fallback is disabled.
 - Runs one general retail search and one region-aware marketplace search.
 - Selects up to four general retail/seller pages and up to three recognized marketplace pages, then deduplicates and fetches no more than seven pages in total.
 - Marketplace discovery targets Amazon, Etsy, eBay and Alibaba using the appropriate Amazon/eBay domain for the selected region.
 - Marketplace candidates must be direct product-detail URLs. Marketplace search, category, filter and collection pages are excluded from the three reserved marketplace slots.
-- For a PDP, extracts a retail price only when the page provides a usable price in the requested currency.
-- For a PLP, extracts the lowest and highest prices tied to structured product offers or repeated product-card elements in the requested currency. It does not use unrelated currency amounts elsewhere on the page.
+- Extracts a retail price only from one structured `Product` offer or explicit product-price metadata in the requested currency.
+- Skips pages when the required structured data or product metadata is inaccessible. Visible currency text alone is not accepted as proof of a product price.
+- Rejects PLPs, homepages, seller profiles, search pages, categories, collections and filtered result pages.
 - Returns the specific product-detail-page link rather than a general search-results link.
 - Omits inaccessible pages and pages without an unambiguous price, and reports the omission reason.
 
 ## Estimate Summary
 
-- **Price range:** Lowest and highest retail prices across usable PDP prices and PLP ranges returned by the search.
+- **Price range:** Lowest and highest retail prices across the usable PDPs returned by the search.
 - **Search diagnostics:** Separates general and marketplace search counts and shows direct-product candidates, selected marketplace pages, fetched pages, valid retail prices and rejected pages. Rejected-page links and reasons are listed when available.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.
@@ -38,7 +39,7 @@ Each result row contains:
 
 1. **Image:** Image extracted from that matched product's source page. It is not the image uploaded by the user. If no usable source image is found, the row shows "Not found."
 2. **Source item:** Product title and price-extraction note.
-3. **Marketplace:** Website or marketplace hosting the product page, such as Amazon, eBay or Etsy.
+3. **Marketplace:** Known platforms are labelled Amazon, eBay, Etsy or Alibaba. Independent retail domains are labelled "Seller website."
 4. **Seller:** Seller name found on the product page. Shows "Not listed" when unavailable.
 5. **Price:** Extracted retail price in the selected region's currency.
 6. **MOQ:** Currently paused while wholesale lookup is deferred.

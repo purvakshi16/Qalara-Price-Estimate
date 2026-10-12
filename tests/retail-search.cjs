@@ -23,15 +23,10 @@ function provider(html, options = {}) {
   return { api: route(fetch), calls };
 }
 
-test('Search then Fetch yields visible retail price without an image or seller', async () => {
+test('rejects visible price text without structured product evidence', async () => {
   const { api, calls } = provider('<h1>Cotton tote</h1><p>$19.99</p>');
   const response = await api.POST(request());
-  assert.equal(response.status, 200);
-  const data = await response.json();
-  assert.equal(data.displayProducts[0].price, 19.99);
-  assert.equal(data.displayProducts[0].seller, 'Not listed');
-  assert.equal(data.displayProducts[0].imageUrl, '');
-  assert.equal(data.providerMode, 'search-fetch');
+  assert.equal(response.status, 422);
   assert.deepEqual(calls, ['api.search.tinyfish.ai', 'api.search.tinyfish.ai', 'api.fetch.tinyfish.ai']);
 });
 
@@ -45,13 +40,14 @@ test('uses explicit seller and product image from structured offer', async () =>
 });
 
 test('prefers sale price over struck out regular price and ignores related products', async () => {
-  const { api } = provider('<h1>Cotton tote</h1><p>Regular price <del>$30.00</del></p><p>Sale price $20.00</p><h2>Related products</h2><p>$5.00</p>');
+  const product = { '@type': 'Product', name: 'Cotton tote', offers: { price: '20.00', priceCurrency: 'USD' } };
+  const { api } = provider(`<script type="application/ld+json">${JSON.stringify(product)}</script><h1>Cotton tote</h1><p>Regular price <del>$30.00</del></p><p>Sale price $20.00</p>`);
   const data = await (await api.POST(request())).json();
   assert.equal(data.displayProducts[0].price, 20);
 });
 
 test('parses German decimal comma and localizes search', async () => {
-  const { api } = provider('<h1>Cotton tote</h1><p>Preis: 19,95 €</p>', { location: 'DE' });
+  const { api } = provider('<meta property="product:price:currency" content="EUR"><meta property="product:price:amount" content="19,95"><h1>Cotton tote</h1>', { location: 'DE' });
   const data = await (await api.POST(request('EU'))).json();
   assert.equal(data.displayProducts[0].price, 19.95);
   assert.equal(data.currency, 'EUR');
@@ -76,7 +72,7 @@ test('keeps successful page when another page is blocked', async () => {
   const other = 'https://shop.example/products/other-tote';
   const { api } = provider('', {
     results: [{ url, title: 'Cotton tote' }, { url: other, title: 'Other tote' }],
-    fetchResult: { results: [{ url, text: '<h1>Cotton tote</h1><p>$19.99</p>' }], errors: [{ url: other, error: 'bot_blocked' }] },
+    fetchResult: { results: [{ url, text: '<meta property="product:price:currency" content="USD"><meta property="product:price:amount" content="19.99"><h1>Cotton tote</h1>' }], errors: [{ url: other, error: 'bot_blocked' }] },
   });
   const data = await (await api.POST(request())).json();
   assert.equal(data.displayProducts.length, 1);
@@ -123,7 +119,7 @@ test('uses direct marketplace product links and rejects marketplace filter pages
       return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? marketplaceResults : [] });
     }
     fetchedUrls = JSON.parse(init.body).urls;
-    return Response.json({ results: [{ url: fetchedUrls[0], text: '<h1>Direct Amazon tote</h1><p>$24.00</p>' }], errors: [] });
+    return Response.json({ results: [{ url: fetchedUrls[0], text: '<meta property="product:price:currency" content="USD"><meta property="product:price:amount" content="24.00"><h1>Direct Amazon tote</h1>' }], errors: [] });
   });
   const data = await (await api.POST(request())).json();
   assert.deepEqual(fetchedUrls, ['https://www.amazon.com/dp/B0DIRECT123']);
@@ -131,8 +127,8 @@ test('uses direct marketplace product links and rejects marketplace filter pages
   assert.equal(data.searched.marketplaceCandidatesSelected, 1);
 });
 
-test('uses the lowest and highest structured product prices from a listing page', async () => {
-  const listingUrl = 'https://shop.example/collections/totes';
+test('rejects a listing page containing multiple structured products', async () => {
+  const listingUrl = 'https://shop.example/products/tote-collection';
   const listing = {
     '@graph': [
       { '@type': 'Product', name: 'Small tote', offers: { price: '12.00', priceCurrency: 'USD' } },
@@ -143,10 +139,9 @@ test('uses the lowest and highest structured product prices from a listing page'
     results: [{ url: listingUrl, title: 'Tote bags' }],
     fetchResult: { results: [{ url: listingUrl, title: 'Tote bags', text: `<h1>Tote bags</h1><script type="application/ld+json">${JSON.stringify(listing)}</script>` }], errors: [] },
   });
-  const data = await (await api.POST(request())).json();
-  assert.equal(data.displayProducts[0].pageType, 'PLP');
-  assert.equal(data.displayProducts[0].minPrice, 12);
-  assert.equal(data.displayProducts[0].maxPrice, 34);
+  const response = await api.POST(request());
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).skipped.length, 1);
 });
 
 test('stops at allowance error with no retries or paid fallback', async () => {

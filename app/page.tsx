@@ -17,7 +17,7 @@ type ProductResult = {
   notes: string;
   minPrice: number;
   maxPrice: number;
-  pageType: "PDP" | "PLP";
+  pageType: "PDP";
 };
 
 type MoqEvidence = {
