@@ -49,6 +49,8 @@ const initialForm = {
   region: "US" as Region,
 };
 
+const SEARCH_TIMEOUT_MS = 75_000;
+
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("en", {
     style: "currency",
@@ -128,14 +130,18 @@ export default function Home() {
     setLoading(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
       const res = await fetch("/api/search-products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           ...form,
           imageName: uploadedImage?.name,
         }),
       });
+      window.clearTimeout(timeoutId);
 
       const responseText = await res.text();
       let payload;
@@ -150,7 +156,11 @@ export default function Home() {
       setResponse(payload);
       setAcceptedUrls(new Set(payload.displayProducts.map((product: ProductResult) => product.productUrl)));
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : "Search failed.");
+      if (searchError instanceof DOMException && searchError.name === "AbortError") {
+        setError("Search took too long and was stopped. Please try again with a simpler product name or retry in a moment.");
+      } else {
+        setError(searchError instanceof Error ? searchError.message : "Search failed.");
+      }
     } finally {
       setLoading(false);
     }
