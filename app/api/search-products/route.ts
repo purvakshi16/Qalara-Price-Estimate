@@ -50,11 +50,23 @@ export async function POST(request: Request) {
       if (product) products.push(product);
       else skipped.push({ url: text(page.url), reason: "No unambiguous retail price in the requested currency was found." });
     }
-    if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", skipped }, { status: 422 });
+    const searched = {
+      maxVisitedLinks: MAX_PRODUCTS,
+      searchResultsReturned: records(search.results).length,
+      directProductCandidates: candidates.length,
+      visitedLinks: unique.length,
+      fetchedPages: records(fetched.results).length,
+      validPricePages: products.length,
+      rejectedPages: skipped.length,
+      maxEstimateProducts: MAX_PRODUCTS,
+      maxDisplayedSources: MAX_PRODUCTS,
+      imageSearchRequested: false,
+    };
+    if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", skipped, searched }, { status: 422 });
     return NextResponse.json({
       generatedAt: new Date().toISOString(), region: input.region, currency: config.currency, providerMode: "search-fetch",
       estimateProducts: products, displayProducts: products, rawCount: products.length, skipped,
-      searched: { maxVisitedLinks: MAX_PRODUCTS, visitedLinks: unique.length, maxEstimateProducts: MAX_PRODUCTS, maxDisplayedSources: MAX_PRODUCTS, imageSearchRequested: false },
+      searched,
     });
   } catch (error) {
     const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);

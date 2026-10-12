@@ -26,7 +26,7 @@ This document records the functionality intended to be active in the current pro
 - **Price range:** Lowest and highest retail prices among the usable products returned by the search.
 - **Single estimate:** Median of the returned retail prices.
 - **Confidence:** Based on the number of priced matches: Low for one to three, Medium for four to seven, and High for eight or more. With the current seven-candidate limit, the highest possible confidence is Medium.
-- **Single-price details:** Expandable list showing each individual price, product title, product image, marketplace and product link.
+- **Search diagnostics:** Shows search results returned, direct-product candidates, selected pages, fetched pages, valid retail prices and rejected pages. Rejected-page links and reasons are listed when available.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.
 
@@ -48,6 +48,10 @@ Each result row contains:
 - The button remains disabled until search results are available.
 - CSV output includes the image URL, marketplace, seller, title, retail price, currency, MOQ fields, product URL and extraction notes.
 - PDF output prints the current estimate view through the browser's print-to-PDF flow.
+
+## Interface Shape
+
+- Form fields, buttons, download menus and result tables use rectangular edges without rounded corners.
 
 ## Currently Paused
 

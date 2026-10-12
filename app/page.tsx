@@ -32,6 +32,12 @@ type SearchResponse = {
   skipped?: { url: string; reason: string }[];
   searched: {
     maxVisitedLinks: number;
+    searchResultsReturned: number;
+    directProductCandidates: number;
+    visitedLinks: number;
+    fetchedPages: number;
+    validPricePages: number;
+    rejectedPages: number;
     maxEstimateProducts: number;
     maxDisplayedSources: number;
     imageSearchRequested: boolean;
@@ -85,6 +91,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [searchProgress, setSearchProgress] = useState("");
+  const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched" | "skipped"> | null>(null);
 
   const estimate = useMemo(() => {
     const products = response?.estimateProducts ?? [];
@@ -131,6 +138,7 @@ export default function Home() {
     setError("");
     setLoading(true);
     setResponse(null);
+    setLastDiagnostics(null);
     setSearchProgress("Finding product pages and reading retail prices...");
 
     let timeoutId: number | undefined;
@@ -155,11 +163,13 @@ export default function Home() {
       }
 
       if (!res.ok) {
+        if (payload.searched) setLastDiagnostics({ searched: payload.searched, skipped: payload.skipped });
         const reasons = payload.skipped?.map((item: { reason: string }) => item.reason).join("; ");
         throw new Error([payload.error ?? "Search failed.", reasons].filter(Boolean).join(" "));
       }
 
       setResponse(payload);
+      setLastDiagnostics({ searched: payload.searched, skipped: payload.skipped });
     } catch (searchError) {
       if (searchError instanceof DOMException && searchError.name === "AbortError") {
         setError("Search timed out while reading product pages. No paid automation was started.");
@@ -352,22 +362,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <details className="details">
-                    <summary>View single estimate prices with sources</summary>
-                    <div className="details-list">
-                      {response.displayProducts.map((product) => (
-                        <div className="detail-item" key={product.productUrl}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          {product.imageUrl ? <img className="product-thumb" src={product.imageUrl} alt={product.title} /> : <span className="source-meta">No image</span>}
-                          <strong>{formatMoney(product.price, product.currency)}</strong>
-                          <span>{product.title}</span>
-                          <a href={product.productUrl} target="_blank" rel="noreferrer">
-                            {product.marketplace}
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
+                  <SearchDiagnostics diagnostics={lastDiagnostics} />
 
                   <div className="results-header">
                     <div>
@@ -426,6 +421,8 @@ export default function Home() {
                     </table>
                   </div>
                 </>
+              ) : lastDiagnostics ? (
+                <SearchDiagnostics diagnostics={lastDiagnostics} />
               ) : (
                 <div className="empty">
                   <div>
@@ -440,6 +437,31 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+
+function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, "searched" | "skipped"> | null }) {
+  if (!diagnostics) return null;
+  const { searched, skipped = [] } = diagnostics;
+  return (
+    <section className="diagnostics" aria-labelledby="diagnostics-title">
+      <h2 id="diagnostics-title" className="panel-title">Search diagnostics</h2>
+      <div className="diagnostic-grid">
+        <div><strong>{searched.searchResultsReturned}</strong><span>Search results returned</span></div>
+        <div><strong>{searched.directProductCandidates}</strong><span>Direct product candidates</span></div>
+        <div><strong>{searched.visitedLinks}</strong><span>Pages selected</span></div>
+        <div><strong>{searched.fetchedPages}</strong><span>Pages fetched</span></div>
+        <div><strong>{searched.validPricePages}</strong><span>Valid retail prices</span></div>
+        <div><strong>{searched.rejectedPages}</strong><span>Rejected pages</span></div>
+      </div>
+      {skipped.length ? (
+        <div className="diagnostic-list">
+          {skipped.map((item) => (
+            <p key={`${item.url}-${item.reason}`}><a href={item.url} target="_blank" rel="noreferrer">Rejected page</a><span>{item.reason}</span></p>
+          ))}
+        </div>
+      ) : <p className="source-meta">No selected pages were rejected.</p>}
+    </section>
   );
 }
 

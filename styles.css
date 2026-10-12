@@ -147,7 +147,7 @@ a {
 .field select {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   background: #fbfcfa;
   color: var(--foreground);
   padding: 11px 12px;
@@ -220,7 +220,7 @@ a {
   min-width: 150px;
   padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0;
   background: #ffffff;
   box-shadow: var(--shadow);
   z-index: 20;
@@ -232,7 +232,7 @@ a {
 
 .download-options button {
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   color: var(--foreground);
   padding: 10px 12px;
@@ -250,7 +250,7 @@ a {
   gap: 8px;
   min-height: 40px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0 14px;
   background: var(--accent);
   color: #ffffff;
@@ -326,8 +326,36 @@ a {
   overflow-x: auto;
   margin-top: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0;
 }
+
+.diagnostics {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  padding: 14px;
+  background: #fbfcfa;
+}
+
+.diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.diagnostic-grid div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.diagnostic-grid strong { font-size: 18px; }
+.diagnostic-grid span, .diagnostic-list span { color: var(--muted); font-size: 12px; }
+.diagnostic-list { margin-top: 12px; border-top: 1px solid var(--line); }
+.diagnostic-list p { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin: 0; padding: 9px 0; border-bottom: 1px solid var(--line); }
 
 table {
   width: 100%;
@@ -480,7 +508,7 @@ tr:last-child td {
 
 .source-item {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
@@ -508,6 +536,10 @@ tr:last-child td {
   .workspace,
   .estimate-grid {
     grid-template-columns: 1fr;
+  }
+
+  .diagnostic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .estimate-grid.three {
