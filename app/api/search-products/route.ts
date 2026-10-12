@@ -128,23 +128,25 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     try { json = JSON.parse($(element).text()); } catch { continue; }
     structuredProducts.push(...schemaProducts(json));
   }
-  if (structuredProducts.length > 1) return null;
   let price: number | null = null;
   let seller = "Not listed";
   let imageUrl = "";
   let evidence = "";
-  for (const product of structuredProducts) {
+  const pricedProducts = structuredProducts.flatMap((product) => {
     const offers = Array.isArray(product.offers) ? records(product.offers) : records([product.offers]);
     const valid = offers.filter((offer) => text(offer.priceCurrency).toUpperCase() === currency && amount(offer.price) !== null);
-    const prices = [...new Set(valid.map((offer) => amount(offer.price)))];
-    if (prices.length !== 1) continue;
-    price = prices[0];
-    const sellerRecord = valid[0].seller;
+    return valid.map((offer) => ({ product, offer, price: amount(offer.price) as number }));
+  });
+  const structuredPrices = [...new Set(pricedProducts.map((entry) => entry.price))];
+  const structuredIdentities = [...new Set(pricedProducts.map((entry) => productIdentity(entry.product, url)).filter(Boolean))];
+  if (structuredPrices.length === 1 && structuredIdentities.length <= 1) {
+    const selected = pricedProducts[0];
+    price = selected.price;
+    const sellerRecord = selected.offer.seller;
     seller = typeof sellerRecord === "string" ? sellerRecord : text(asRecord(sellerRecord).name) || "Not listed";
-    const image = Array.isArray(product.image) ? product.image[0] : product.image;
+    const image = Array.isArray(selected.product.image) ? selected.product.image[0] : selected.product.image;
     imageUrl = resolveUrl(typeof image === "string" ? image : text(asRecord(image).url), url);
     evidence = "Price from the product's listed offer.";
-    break;
   }
   if (price === null) {
     const metaCurrency = $("meta[property='product:price:currency'], meta[itemprop='priceCurrency']").first().attr("content");
@@ -189,6 +191,15 @@ function schemaProducts(value: unknown): RecordValue[] {
   const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
   if (types.includes("Product")) return [record];
   return schemaProducts(record["@graph"] ?? []);
+}
+function productIdentity(product: RecordValue, pageUrl: string) {
+  const id = text(product["@id"]).replace(/#.*$/, "");
+  const productUrl = text(product.url).replace(/#.*$/, "");
+  const name = text(product.name).toLowerCase().replace(/\s+/g, " ");
+  const canonical = pageUrl.replace(/[?#].*$/, "");
+  if (id && id !== canonical) return id;
+  if (productUrl && productUrl !== canonical) return productUrl;
+  return name;
 }
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
 function asRecord(value: unknown): RecordValue { return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {}; }

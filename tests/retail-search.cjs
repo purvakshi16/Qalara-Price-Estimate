@@ -39,6 +39,17 @@ test('uses explicit seller and product image from structured offer', async () =>
   assert.equal(data.displayProducts[0].imageUrl, 'https://shop.example/tote.jpg');
 });
 
+test('merges duplicate product schemas when identity and price agree', async () => {
+  const product = { '@type': 'Product', '@id': `${url}#this`, name: 'Cotton tote', image: '/tote.jpg', offers: { price: '25.50', priceCurrency: 'USD', seller: { name: 'Tote Studio' } } };
+  const duplicate = { ...product, url, image: '/larger-tote.jpg' };
+  const { api } = provider(`<script type="application/ld+json">${JSON.stringify(product)}</script><script type="application/ld+json">${JSON.stringify(duplicate)}</script><h1>Cotton tote</h1>`);
+  const response = await api.POST(request());
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.displayProducts[0].price, 25.5);
+  assert.equal(data.displayProducts[0].seller, 'Tote Studio');
+});
+
 test('prefers sale price over struck out regular price and ignores related products', async () => {
   const product = { '@type': 'Product', name: 'Cotton tote', offers: { price: '20.00', priceCurrency: 'USD' } };
   const { api } = provider(`<script type="application/ld+json">${JSON.stringify(product)}</script><h1>Cotton tote</h1><p>Regular price <del>$30.00</del></p><p>Sale price $20.00</p>`);
