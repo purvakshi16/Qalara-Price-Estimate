@@ -83,6 +83,7 @@ export default function Home() {
   const [acceptedUrls, setAcceptedUrls] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [downloadOpen, setDownloadOpen] = useState(false);
 
   const accepted = useMemo(() => {
     const rows = response?.displayProducts ?? [];
@@ -129,9 +130,10 @@ export default function Home() {
     setError("");
     setLoading(true);
 
+    let timeoutId: number | undefined;
     try {
       const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+      timeoutId = window.setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
       const res = await fetch("/api/search-products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,7 +143,6 @@ export default function Home() {
           imageName: uploadedImage?.name,
         }),
       });
-      window.clearTimeout(timeoutId);
 
       const responseText = await res.text();
       let payload;
@@ -162,6 +163,7 @@ export default function Home() {
         setError(searchError instanceof Error ? searchError.message : "Search failed.");
       }
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }
@@ -227,13 +229,30 @@ export default function Home() {
               <p className="brand-subtitle">UK, US and EU selling price estimates from comparable sources</p>
             </div>
           </div>
-          <div className="button-row">
-            <button className="btn secondary" onClick={() => window.print()} disabled={!response} title="Download as PDF">
-              PDF
+          <div className="download-menu">
+            <button className="btn secondary" onClick={() => setDownloadOpen((open) => !open)} disabled={!response} type="button">
+              Download
             </button>
-            <button className="btn secondary" onClick={exportCsv} disabled={!response} title="Download as Excel-compatible CSV">
-              Excel CSV
-            </button>
+            <div className="download-options" hidden={!downloadOpen}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDownloadOpen(false);
+                  window.print();
+                }}
+              >
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDownloadOpen(false);
+                  exportCsv();
+                }}
+              >
+                Excel CSV
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -306,6 +325,7 @@ export default function Home() {
                 <button className="btn" disabled={loading || !form.productName.trim()} type="submit">
                   {loading ? "Searching live products..." : "Find Similar Items"}
                 </button>
+                {loading ? <p className="source-meta">Searching can take up to a minute. Please keep this page open.</p> : null}
               </form>
             </div>
           </section>
