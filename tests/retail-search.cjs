@@ -23,11 +23,20 @@ function provider(html, options = {}) {
   return { api: route(fetch), calls };
 }
 
-test('rejects visible price text without structured product evidence', async () => {
+test('extracts a single requested-currency price from primary PDP text', async () => {
   const { api, calls } = provider('<h1>Cotton tote</h1><p>$19.99</p>');
   const response = await api.POST(request());
-  assert.equal(response.status, 422);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).displayProducts[0].price, 19.99);
   assert.deepEqual(calls, ['api.search.tinyfish.ai', 'api.search.tinyfish.ai', 'api.fetch.tinyfish.ai']);
+});
+
+test('extracts TinyFish simplified Shopify PDP text', async () => {
+  const html = '<html><body><h1>Napkin - Soft Cotton Club</h1><p>Regular price €6,50 EUR</p><p>Quantity</p><p>20 Soft Luxury napkins, 40 x 40 cm.</p></body></html>';
+  const { api } = provider(html, { location: 'DE' });
+  const data = await (await api.POST(request('EU'))).json();
+  assert.equal(data.displayProducts[0].price, 6.5);
+  assert.match(data.displayProducts[0].notes, /primary PDP text/);
 });
 
 test('uses explicit seller and product image from structured offer', async () => {

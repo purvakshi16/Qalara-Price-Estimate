@@ -20,7 +20,7 @@ This document records the functionality intended to be active in the current pro
 - Selects up to four general retail/seller pages and up to three recognized marketplace pages, then deduplicates and fetches no more than seven pages in total.
 - Marketplace discovery targets Amazon, Etsy, eBay and Alibaba using the appropriate Amazon/eBay domain for the selected region.
 - Marketplace candidates must be direct product-detail URLs. Marketplace search, category, filter and collection pages are excluded from the three reserved marketplace slots.
-- Extracts retail price evidence in layers: structured `Product` offers, explicit product-price metadata (including Shopify Open Graph fields), and then recognized primary-price elements on the PDP. Visible primary prices must use the requested currency; crossed-out, shipping, related-product and conflicting prices are excluded.
+- Extracts retail price evidence in layers: structured `Product` offers, explicit product-price metadata (including Shopify Open Graph fields), recognized primary-price elements, and finally unambiguous currency-marked price text near the PDP heading. Crossed-out, shipping, related-product and conflicting prices are excluded.
 - Skips pages when the required structured data or product metadata is inaccessible. Visible currency text alone is not accepted as proof of a product price.
 - Rejects PLPs, homepages, seller profiles, search pages, categories, collections and filtered result pages.
 - Returns the specific product-detail-page link rather than a general search-results link.

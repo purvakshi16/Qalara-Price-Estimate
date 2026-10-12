@@ -159,6 +159,10 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     price = visiblePdpPrice($, currency);
     if (price !== null) evidence = "Price from the product page's primary price element.";
   }
+  if (price === null) {
+    price = primaryPdpTextPrice($, heading, currency);
+    if (price !== null) evidence = "Price from the product's primary PDP text.";
+  }
   if (price === null) return null;
   $("script,style,nav,header,footer,aside,del,s,[aria-hidden='true']").remove();
   $("p,div,section,h1,h2,h3,li,br").before("\n").after("\n");
@@ -206,6 +210,21 @@ function visiblePdpPrice($: ReturnType<typeof load>, currency: string): number |
     if (unique.length === 1) return unique[0];
   }
   return null;
+}
+function primaryPdpTextPrice($: ReturnType<typeof load>, heading: string, currency: string): number | null {
+  const copy = load($.html());
+  copy("script,style,nav,header,footer,aside,del,s,[aria-hidden='true']").remove();
+  copy("[class*='related'],[id*='related'],[class*='recommend'],[id*='recommend'],[class*='recently'],[id*='recently'],.product-card,.card--product").remove();
+  copy("p,div,section,h1,h2,h3,li,br").before("\n").after("\n");
+  const lines = copy.root().text().split(/\n+/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const start = heading ? Math.max(0, lines.findIndex((line) => line === heading)) : 0;
+  const primary = lines.slice(start, start + 60);
+  const stop = primary.findIndex((line) => /you may also|related products|recommended products|customers also|recently viewed/i.test(line));
+  const productLines = (stop >= 0 ? primary.slice(0, stop) : primary)
+    .filter((line) => !/shipping|delivery|postage|per count|per item|\/\s*(?:count|item|kg|metre)/i.test(line));
+  const prices = productLines.flatMap((line) => currencyAmounts(line, currency));
+  const unique = [...new Set(prices)];
+  return unique.length === 1 ? unique[0] : null;
 }
 function currencyAmounts(value: string, currency: string): number[] {
   const explicitCodes = value.toUpperCase().match(/\b(?:USD|EUR|GBP|CAD|AUD|INR)\b/g) ?? [];
