@@ -16,7 +16,7 @@ This document records the functionality intended to be active in the current pro
 
 - Uses the product name, description, material and selected region to search for direct retail product pages.
 - Uses free search and page-fetch operations only. Paid browser-agent fallback is disabled.
-- Checks up to two direct product pages per search in the current limited production mode.
+- Checks up to seven direct product pages per search.
 - Extracts a retail price only when the page provides a usable price in the requested currency.
 - Returns the specific product-detail-page link rather than a general search-results link.
 - Omits inaccessible pages and pages without an unambiguous price, and reports the omission reason.
@@ -25,7 +25,7 @@ This document records the functionality intended to be active in the current pro
 
 - **Price range:** Lowest and highest retail prices among the usable products returned by the search.
 - **Single estimate:** Median of the returned retail prices.
-- **Confidence:** Based on the number of priced matches. With the current two-source limit, confidence will normally be Low.
+- **Confidence:** Based on the number of priced matches: Low for one to three, Medium for four to seven, and High for eight or more. With the current seven-candidate limit, the highest possible confidence is Medium.
 - **Single-price details:** Expandable list showing each individual price, product title, product image, marketplace and product link.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.

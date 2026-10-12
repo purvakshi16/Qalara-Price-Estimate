@@ -431,7 +431,7 @@ export default function Home() {
                   <div>
                     <div className="empty-icon">⌕</div>
                     <p>Enter a product and run a search to generate comparable market prices.</p>
-                    <p className="muted">Two retail product sources.</p>
+                    <p className="muted">Checks up to seven retail product sources.</p>
                   </div>
                 </div>
               )}

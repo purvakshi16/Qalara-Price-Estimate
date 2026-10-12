@@ -15,7 +15,7 @@ const regions = {
   UK: { currency: "GBP", location: "GB", language: "en", market: "United Kingdom" },
   EU: { currency: "EUR", location: "DE", language: "de", market: "Germany" },
 };
-const MAX_PRODUCTS = 2;
+const MAX_PRODUCTS = 7;
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
