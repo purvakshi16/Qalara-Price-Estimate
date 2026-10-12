@@ -15,6 +15,9 @@ type ProductResult = {
   similarity: number;
   moq: MoqEvidence | null;
   notes: string;
+  minPrice: number;
+  maxPrice: number;
+  pageType: "PDP" | "PLP";
 };
 
 type MoqEvidence = {
@@ -66,13 +69,6 @@ function formatMoney(value: number, currency: string) {
   }).format(value);
 }
 
-function median(values: number[]) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -95,22 +91,14 @@ export default function Home() {
 
   const estimate = useMemo(() => {
     const products = response?.estimateProducts ?? [];
-    const prices = products.map((product) => product.price);
+    const minimums = products.map((product) => product.minPrice ?? product.price);
+    const maximums = products.map((product) => product.maxPrice ?? product.price);
     const currency = response?.currency ?? (form.region === "UK" ? "GBP" : form.region === "US" ? "USD" : "EUR");
 
-    if (!prices.length) {
-      return { currency, min: 0, max: 0, median: 0, confidence: "No priced products" };
+    if (!minimums.length) {
+      return { currency, min: 0, max: 0 };
     }
-
-    const confidence = prices.length >= 8 ? "High" : prices.length >= 4 ? "Medium" : "Low";
-
-    return {
-      currency,
-      min: Math.min(...prices),
-      max: Math.max(...prices),
-      median: median(prices),
-      confidence,
-    };
+    return { currency, min: Math.min(...minimums), max: Math.max(...maximums) };
   }, [form.region, response]);
 
   async function handleImageChange(fileList: FileList | null) {
@@ -189,7 +177,9 @@ export default function Home() {
       "Marketplace",
       "Seller",
       "Title",
-      "Retail Price",
+      "Page Type",
+      "Lowest Retail Price",
+      "Highest Retail Price",
       "Currency",
       "Suggested MOQ",
       "Wholesale Price",
@@ -203,7 +193,9 @@ export default function Home() {
       product.marketplace,
       product.seller,
       product.title,
-      product.price,
+      product.pageType,
+      product.minPrice ?? product.price,
+      product.maxPrice ?? product.price,
       product.currency,
       product.moq?.suggestedMoq ?? "Not found",
       product.moq?.wholesalePrice ?? "",
@@ -342,23 +334,13 @@ export default function Home() {
             <div className="panel-body">
               {response ? (
                 <>
-                  <div className="estimate-grid">
+                  <div className="estimate-grid one">
                     <div className="metric">
                       <p className="metric-label">Price range</p>
                       <p className="metric-value">
                         {formatMoney(estimate.min, estimate.currency)} - {formatMoney(estimate.max, estimate.currency)}
                       </p>
                       <p className="metric-note">From up to {response.searched.maxEstimateProducts} priced products</p>
-                    </div>
-                    <div className="metric">
-                      <p className="metric-label">Single estimate</p>
-                      <p className="metric-value">{formatMoney(estimate.median, estimate.currency)}</p>
-                      <p className="metric-note">Median of estimate set</p>
-                    </div>
-                    <div className="metric">
-                      <p className="metric-label">Confidence</p>
-                      <p className="metric-value">{estimate.confidence}</p>
-                      <p className="metric-note">Based on priced matches</p>
                     </div>
                   </div>
 
@@ -406,7 +388,7 @@ export default function Home() {
                               </td>
                               <td>{product.marketplace}</td>
                               <td>{product.seller}</td>
-                              <td>{formatMoney(product.price, product.currency)}</td>
+                              <td>{formatProductPrice(product)}</td>
                               <td>
                                 <span>Paused</span>
                               </td>
@@ -463,6 +445,12 @@ function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, 
       ) : <p className="source-meta">No selected pages were rejected.</p>}
     </section>
   );
+}
+
+function formatProductPrice(product: ProductResult) {
+  const min = product.minPrice ?? product.price;
+  const max = product.maxPrice ?? product.price;
+  return min === max ? formatMoney(min, product.currency) : `${formatMoney(min, product.currency)} - ${formatMoney(max, product.currency)}`;
 }
 
 function MoqCell({ moq }: { moq: MoqEvidence | null }) {

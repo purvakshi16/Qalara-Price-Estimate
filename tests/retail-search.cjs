@@ -15,7 +15,7 @@ function provider(html, options = {}) {
       return Response.json({ results: options.results ?? [{ url, title: 'Cotton tote' }] });
     }
     const body = JSON.parse(init.body);
-    assert.ok(body.urls.length <= 2);
+    assert.ok(body.urls.length <= 7);
     assert.equal(body.format, 'html');
     return Response.json(options.fetchResult ?? { results: [{ url, title: 'Cotton tote', text: html }], errors: [] });
   };
@@ -82,10 +82,28 @@ test('keeps successful page when another page is blocked', async () => {
   assert.equal(data.skipped[0].reason, 'bot_blocked');
 });
 
-test('filters general search and collection links without fetching them', async () => {
-  const { api, calls } = provider('', { results: [{ url: 'https://shop.example/collections/totes' }, { url: 'https://google.com/search?q=totes' }] });
+test('filters search-engine links without fetching them', async () => {
+  const { api, calls } = provider('', { results: [{ url: 'https://google.com/search?q=totes' }] });
   assert.equal((await api.POST(request())).status, 422);
   assert.equal(calls.length, 1);
+});
+
+test('uses the lowest and highest structured product prices from a listing page', async () => {
+  const listingUrl = 'https://shop.example/collections/totes';
+  const listing = {
+    '@graph': [
+      { '@type': 'Product', name: 'Small tote', offers: { price: '12.00', priceCurrency: 'USD' } },
+      { '@type': 'Product', name: 'Large tote', offers: { price: '34.00', priceCurrency: 'USD' } },
+    ],
+  };
+  const { api } = provider(`<h1>Tote bags</h1><script type="application/ld+json">${JSON.stringify(listing)}</script>`, {
+    results: [{ url: listingUrl, title: 'Tote bags' }],
+    fetchResult: { results: [{ url: listingUrl, title: 'Tote bags', text: `<h1>Tote bags</h1><script type="application/ld+json">${JSON.stringify(listing)}</script>` }], errors: [] },
+  });
+  const data = await (await api.POST(request())).json();
+  assert.equal(data.displayProducts[0].pageType, 'PLP');
+  assert.equal(data.displayProducts[0].minPrice, 12);
+  assert.equal(data.displayProducts[0].maxPrice, 34);
 });
 
 test('stops at allowance error with no retries or paid fallback', async () => {

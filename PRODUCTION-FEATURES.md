@@ -14,18 +14,17 @@ This document records the functionality intended to be active in the current pro
 
 ## Retail Search
 
-- Uses the product name, description, material and selected region to search for direct retail product pages.
+- Uses the product name, description, material and selected region to search for retail product-detail pages (PDPs) and relevant product-listing pages (PLPs).
 - Uses free search and page-fetch operations only. Paid browser-agent fallback is disabled.
 - Checks up to seven direct product pages per search.
-- Extracts a retail price only when the page provides a usable price in the requested currency.
+- For a PDP, extracts a retail price only when the page provides a usable price in the requested currency.
+- For a PLP, extracts the lowest and highest prices tied to structured product offers or repeated product-card elements in the requested currency. It does not use unrelated currency amounts elsewhere on the page.
 - Returns the specific product-detail-page link rather than a general search-results link.
 - Omits inaccessible pages and pages without an unambiguous price, and reports the omission reason.
 
 ## Estimate Summary
 
-- **Price range:** Lowest and highest retail prices among the usable products returned by the search.
-- **Single estimate:** Median of the returned retail prices.
-- **Confidence:** Based on the number of priced matches: Low for one to three, Medium for four to seven, and High for eight or more. With the current seven-candidate limit, the highest possible confidence is Medium.
+- **Price range:** Lowest and highest retail prices across usable PDP prices and PLP ranges returned by the search.
 - **Search diagnostics:** Shows search results returned, direct-product candidates, selected pages, fetched pages, valid retail prices and rejected pages. Rejected-page links and reasons are listed when available.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.

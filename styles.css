@@ -286,6 +286,10 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.estimate-grid.one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .metric {
   border: 1px solid var(--line);
   border-radius: 8px;

@@ -9,6 +9,7 @@ type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
   productUrl: string; imageUrl: string; similarity: number; moq: null; notes: string;
+  minPrice: number; maxPrice: number; pageType: "PDP" | "PLP";
 };
 const regions = {
   US: { currency: "USD", location: "US", language: "en", market: "United States" },
@@ -28,12 +29,12 @@ export async function POST(request: Request) {
     const apiKey = getApiKey();
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
     const signal = AbortSignal.timeout(50_000);
-    const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "price inurl:products"].filter(Boolean).join(" ");
+    const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
     const params = new URLSearchParams({ query, location: config.location, language: config.language,
-      purpose: `Find individual retail product detail pages for ${input.productName} sold in ${config.market}. Exclude category pages, wholesale and articles.`,
+      purpose: `Find retail product detail pages or relevant product listing pages for ${input.productName} sold in ${config.market}. Exclude wholesale pages and articles.`,
     });
     const search = await providerJson(`https://api.search.tinyfish.ai?${params}`, apiKey, signal);
-    const candidates = records(search.results).filter((row) => isProductUrl(text(row.url)))
+    const candidates = records(search.results).filter((row) => isRetailCandidateUrl(text(row.url)))
       .sort((a, b) => Number(hasProductPath(text(b.url))) - Number(hasProductPath(text(a.url))));
     const unique = candidates.filter((row, index, rows) => rows.findIndex((other) => text(other.url).split("#")[0] === text(row.url).split("#")[0]) === index).slice(0, MAX_PRODUCTS);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
@@ -104,10 +105,47 @@ async function providerJson(url: string, key: string, signal: AbortSignal, body?
 
 function extractProduct(page: RecordValue, candidate: RecordValue, currency: string): ProductResult | null {
   const url = text(page.final_url) || text(page.url);
-  if (!isProductUrl(url)) return null;
+  if (!isRetailCandidateUrl(url)) return null;
   const $ = load(text(page.text));
   const heading = $("h1").first().text().trim();
   const title = heading || text(page.title) || text(candidate.title);
+  const listingProductPrices: number[] = [];
+  let listingImage = "";
+  let schemaProductCount = 0;
+  for (const element of $('script[type="application/ld+json"]').toArray()) {
+    let json: unknown;
+    try { json = JSON.parse($(element).text()); } catch { continue; }
+    const listedProducts = schemaProducts(json);
+    schemaProductCount += listedProducts.length;
+    for (const product of listedProducts) {
+      const offers = Array.isArray(product.offers) ? records(product.offers) : records([product.offers]);
+      for (const offer of offers) {
+        if (text(offer.priceCurrency).toUpperCase() !== currency) continue;
+        const offerPrice = amount(offer.price);
+        if (offerPrice !== null) listingProductPrices.push(offerPrice);
+      }
+      if (!listingImage) {
+        const image = Array.isArray(product.image) ? product.image[0] : product.image;
+        listingImage = resolveUrl(typeof image === "string" ? image : text(asRecord(image).url), url);
+      }
+    }
+  }
+  const listingCards = $('[itemtype*="Product"], .product-card, [class*="product-card"], [class*="product-item"], [data-product-id]').toArray();
+  for (const card of listingCards) {
+    const found = visiblePrice($(card).text().replace(/\s+/g, " "), currency);
+    if (found) listingProductPrices.push(found.price);
+  }
+  const listingPrices = [...new Set(listingProductPrices)];
+  if ((isListingUrl(url) || schemaProductCount > 1) && listingPrices.length) {
+    const minPrice = Math.min(...listingPrices);
+    const maxPrice = Math.max(...listingPrices);
+    return {
+      title: title || `${marketplace(url)} product listing`, price: minPrice, minPrice, maxPrice,
+      currency, seller: "Not listed", marketplace: marketplace(url), productUrl: url,
+      imageUrl: listingImage, similarity: 0, moq: null, pageType: "PLP",
+      notes: `Listing page range from ${listingPrices.length} priced product entr${listingPrices.length === 1 ? "y" : "ies"}.`,
+    };
+  }
   let price: number | null = null;
   let seller = "Not listed";
   let imageUrl = "";
@@ -159,7 +197,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
       if (image) imageUrl = resolveUrl($(image).attr("src") || "", url);
     }
   }
-  return { title, price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, moq: null, notes: evidence };
+  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, moq: null, pageType: "PDP", notes: evidence };
 }
 
 function visiblePrice(content: string, currency: string): { price: number; evidence: string } | null {
@@ -206,12 +244,16 @@ function asRecord(value: unknown): RecordValue { return value && typeof value ==
 function records(value: unknown): RecordValue[] { return Array.isArray(value) ? value.filter((item) => item && typeof item === "object" && !Array.isArray(item)) : []; }
 function resolveUrl(value: string, base: string) { try { const url = new URL(value, base); return value && ["http:", "https:"].includes(url.protocol) ? url.toString() : ""; } catch { return ""; } }
 function hasProductPath(url: string) { return /\/(?:products?|dp|gp\/product|ip|itm|listing|p)\//i.test(new URL(url).pathname); }
-function isProductUrl(value: string) {
+function isRetailCandidateUrl(value: string) {
   try {
     const url = new URL(value);
     return ["http:", "https:"].includes(url.protocol) && url.pathname !== "/" && !/(?:^|\.)(?:google|bing|duckduckgo|pinterest|youtube|facebook)\./i.test(url.hostname)
-      && !/\/(?:search|collections|category|categories|blog|blogs|b|tp)(?:\/|$)/i.test(url.pathname) && !url.searchParams.has("q") && !url.searchParams.has("s");
+      && !/\/(?:blog|blogs|articles?|news)(?:\/|$)/i.test(url.pathname);
   } catch { return false; }
+}
+function isListingUrl(value: string) {
+  const url = new URL(value);
+  return /\/(?:search|collections?|category|categories|catalog|shop)(?:\/|$)/i.test(url.pathname) || url.searchParams.has("q") || url.searchParams.has("s");
 }
 function marketplace(value: string) {
   const host = new URL(value).hostname.replace(/^www\./, "");
