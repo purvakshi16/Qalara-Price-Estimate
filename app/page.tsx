@@ -81,22 +81,14 @@ export default function Home() {
   const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [response, setResponse] = useState<SearchResponse | null>(null);
-  const [acceptedUrls, setAcceptedUrls] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [searchProgress, setSearchProgress] = useState("");
 
-  const accepted = useMemo(() => {
-    const rows = response?.displayProducts ?? [];
-    return rows.filter((product) => acceptedUrls.has(product.productUrl));
-  }, [acceptedUrls, response]);
-
   const estimate = useMemo(() => {
     const products = response?.estimateProducts ?? [];
-    const acceptedEstimateProducts = products.filter((product) => acceptedUrls.has(product.productUrl));
-    const source = acceptedEstimateProducts.length ? acceptedEstimateProducts : products;
-    const prices = source.map((product) => product.price);
+    const prices = products.map((product) => product.price);
     const currency = response?.currency ?? (form.region === "UK" ? "GBP" : form.region === "US" ? "USD" : "EUR");
 
     if (!prices.length) {
@@ -112,7 +104,7 @@ export default function Home() {
       median: median(prices),
       confidence,
     };
-  }, [acceptedUrls, form.region, response]);
+  }, [form.region, response]);
 
   async function handleImageChange(fileList: FileList | null) {
     const file = fileList?.[0];
@@ -168,7 +160,6 @@ export default function Home() {
       }
 
       setResponse(payload);
-      setAcceptedUrls(new Set(payload.displayProducts.map((product: ProductResult) => product.productUrl)));
     } catch (searchError) {
       if (searchError instanceof DOMException && searchError.name === "AbortError") {
         setError("Search timed out while reading product pages. No paid automation was started.");
@@ -181,19 +172,10 @@ export default function Home() {
     }
   }
 
-  function toggleProduct(url: string) {
-    setAcceptedUrls((current) => {
-      const next = new Set(current);
-      if (next.has(url)) next.delete(url);
-      else next.add(url);
-      return next;
-    });
-  }
-
   function exportCsv() {
     if (!response) return;
     const header = [
-      "Status",
+      "Image URL",
       "Marketplace",
       "Seller",
       "Title",
@@ -207,7 +189,7 @@ export default function Home() {
       "Notes",
     ];
     const rows = response.displayProducts.map((product) => [
-      acceptedUrls.has(product.productUrl) ? "Accepted" : "Rejected",
+      product.imageUrl,
       product.marketplace,
       product.seller,
       product.title,
@@ -373,7 +355,7 @@ export default function Home() {
                   <details className="details">
                     <summary>View single estimate prices with sources</summary>
                     <div className="details-list">
-                      {accepted.map((product) => (
+                      {response.displayProducts.map((product) => (
                         <div className="detail-item" key={product.productUrl}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           {product.imageUrl ? <img className="product-thumb" src={product.imageUrl} alt={product.title} /> : <span className="source-meta">No image</span>}
@@ -394,14 +376,6 @@ export default function Home() {
                         Visited up to {response.searched.maxVisitedLinks} links. Showing top {response.displayProducts.length} source rows.
                       </p>
                     </div>
-                    <div className="button-row">
-                      <button className="btn secondary" type="button" onClick={() => setAcceptedUrls(new Set(response.displayProducts.map((item) => item.productUrl)))}>
-                        Accept all
-                      </button>
-                      <button className="btn secondary" type="button" onClick={() => setAcceptedUrls(new Set())}>
-                        Reject all
-                      </button>
-                    </div>
                   </div>
                   {response.skipped?.length ? <p className="source-meta">{response.skipped.length} page(s) omitted: {response.skipped.map((item) => item.reason).join("; ")}</p> : null}
 
@@ -409,7 +383,7 @@ export default function Home() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Status</th>
+                          <th>Image</th>
                           <th>Source item</th>
                           <th>Marketplace</th>
                           <th>Seller</th>
@@ -419,19 +393,14 @@ export default function Home() {
                         </tr>
                       </thead>
                       <tbody>
-                        {response.displayProducts.map((product) => {
-                          const isAccepted = acceptedUrls.has(product.productUrl);
-                          return (
+                        {response.displayProducts.map((product) => (
                             <tr key={product.productUrl}>
-                              <td>
-                                <button className={`status ${isAccepted ? "accepted" : "rejected"}`} type="button" onClick={() => toggleProduct(product.productUrl)}>
-                                  {isAccepted ? "Accepted" : "Rejected"}
-                                </button>
+                              <td className="image-cell">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                {product.imageUrl ? <img className="product-thumb" src={product.imageUrl} alt={product.title} /> : <span className="source-meta">Not found</span>}
                               </td>
                               <td>
                                 <div className="source-item">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  {product.imageUrl ? <img className="product-thumb" src={product.imageUrl} alt={product.title} /> : <span className="source-meta">No image</span>}
                                   <div>
                                     <p className="source-title">{product.title}</p>
                                     <p className="source-meta">
@@ -452,8 +421,7 @@ export default function Home() {
                                 </a>
                               </td>
                             </tr>
-                          );
-                        })}
+                        ))}
                       </tbody>
                     </table>
                   </div>
