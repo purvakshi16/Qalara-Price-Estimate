@@ -9,13 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vercel/blob": "^2.8.1",
+    "cheerio": "^1.2.0",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "typescript": "latest",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "typescript": "latest"
   },
   "devDependencies": {
     "eslint": "latest",

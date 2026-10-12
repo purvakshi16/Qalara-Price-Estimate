@@ -29,6 +29,7 @@ type SearchResponse = {
   currency: string;
   estimateProducts: ProductResult[];
   displayProducts: ProductResult[];
+  skipped?: { url: string; reason: string }[];
   searched: {
     maxVisitedLinks: number;
     maxEstimateProducts: number;
@@ -49,7 +50,7 @@ const initialForm = {
   region: "US" as Region,
 };
 
-const SEARCH_TIMEOUT_MS = 10 * 60_000;
+const SEARCH_TIMEOUT_MS = 60_000;
 
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("en", {
@@ -84,8 +85,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [downloadOpen, setDownloadOpen] = useState(false);
-  const [wholesaleStatus, setWholesaleStatus] = useState("");
-  const [wholesalePending, setWholesalePending] = useState(false);
+  const [searchProgress, setSearchProgress] = useState("");
 
   const accepted = useMemo(() => {
     const rows = response?.displayProducts ?? [];
@@ -122,6 +122,13 @@ export default function Home() {
       return;
     }
 
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setError("Choose a JPEG, PNG or WebP image smaller than 2 MB.");
+      setUploadedImage(null);
+      setImagePreview("");
+      return;
+    }
+
     const dataUrl = await fileToDataUrl(file);
     setUploadedImage({ name: file.name, dataUrl });
     setImagePreview(dataUrl);
@@ -132,7 +139,7 @@ export default function Home() {
     setError("");
     setLoading(true);
     setResponse(null);
-    setWholesaleStatus("");
+    setSearchProgress("Finding product pages and reading retail prices...");
 
     let timeoutId: number | undefined;
     try {
@@ -144,7 +151,6 @@ export default function Home() {
         signal: controller.signal,
         body: JSON.stringify({
           ...form,
-          imageName: uploadedImage?.name,
         }),
       });
 
@@ -156,75 +162,16 @@ export default function Home() {
         throw new Error(`Server returned a non-JSON response: ${responseText.replace(/\s+/g, " ").trim().slice(0, 220)}`);
       }
 
-      if (!res.ok) throw new Error(payload.error ?? "Search failed.");
-
-      if (res.status === 202) {
-        const runId = payload.runId;
-        if (typeof runId !== "string") throw new Error("Search did not return a run ID.");
-        while (true) {
-          await new Promise<void>((resolve, reject) => {
-            const onAbort = () => {
-              window.clearTimeout(timer);
-              reject(new DOMException("Search stopped", "AbortError"));
-            };
-            const timer = window.setTimeout(() => {
-              controller.signal.removeEventListener("abort", onAbort);
-              resolve();
-            }, 4000);
-            controller.signal.addEventListener("abort", onAbort, { once: true });
-            if (controller.signal.aborted) onAbort();
-          });
-          const check = await fetch(`/api/search-products?${new URLSearchParams({ runId, region: form.region })}`, {
-            signal: controller.signal,
-            cache: "no-store",
-          });
-          const checkText = await check.text();
-          try {
-            payload = JSON.parse(checkText);
-          } catch {
-            throw new Error("The server could not check search progress. Please try again.");
-          }
-          if (!check.ok) throw new Error(payload.error ?? "Search failed.");
-          if (check.status !== 202) break;
-        }
+      if (!res.ok) {
+        const reasons = payload.skipped?.map((item: { reason: string }) => item.reason).join("; ");
+        throw new Error([payload.error ?? "Search failed.", reasons].filter(Boolean).join(" "));
       }
 
       setResponse(payload);
       setAcceptedUrls(new Set(payload.displayProducts.map((product: ProductResult) => product.productUrl)));
-      setLoading(false);
-      setWholesalePending(true);
-      setWholesaleStatus("Checking seller wholesale details...");
-      try {
-        const start = await fetch("/api/search-products", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({ ...form, stage: "wholesale", products: payload.displayProducts }),
-        });
-        const started = await start.json();
-        if (!start.ok) throw new Error(started.error ?? "Wholesale lookup failed.");
-        if (typeof started.runId !== "string") throw new Error("Wholesale lookup did not return a run ID.");
-        while (true) {
-          const check = await fetch(`/api/search-products?${new URLSearchParams({ runId: started.runId, region: form.region, stage: "wholesale" })}`, { signal: controller.signal, cache: "no-store" });
-          const checked = await check.json();
-          if (!check.ok) throw new Error(checked.error ?? "Wholesale lookup failed.");
-          if (check.status !== 202) {
-            const update = (product: ProductResult) => ({ ...product, moq: checked.evidence.find((item: { productUrl: string; moq: MoqEvidence | null }) => item.productUrl === product.productUrl)?.moq ?? null });
-            setResponse((current) => current ? { ...current, displayProducts: current.displayProducts.map(update), estimateProducts: current.estimateProducts.map(update) } : current);
-            setWholesaleStatus("Wholesale lookup completed.");
-            break;
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 4000));
-          controller.signal.throwIfAborted();
-        }
-      } catch (wholesaleError) {
-        setWholesaleStatus(`Retail results are ready. Wholesale lookup could not finish: ${wholesaleError instanceof Error ? wholesaleError.message : "Please retry."}`);
-      } finally {
-        setWholesalePending(false);
-      }
     } catch (searchError) {
       if (searchError instanceof DOMException && searchError.name === "AbortError") {
-        setError("No results arrived within 10 minutes. Check the search run in your TinyFish dashboard for details.");
+        setError("Search timed out while reading product pages. No paid automation was started.");
       } else {
         setError(searchError instanceof Error ? searchError.message : "Search failed.");
       }
@@ -361,8 +308,8 @@ export default function Home() {
                 </div>
                 <div className="field">
                   <label htmlFor="productImages">Upload image</label>
-                  <input id="productImages" type="file" accept="image/*" onChange={(event) => handleImageChange(event.target.files)} />
-                  <p className="field-help">Reference image selected. Automatic reverse-image search is not connected yet.</p>
+                  <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" disabled />
+                  <p className="field-help">Image search is paused. Retail search uses product name, description and material.</p>
                   <div className="image-preview-grid" aria-live="polite">
                     {imagePreview ? (
                       <>
@@ -388,10 +335,10 @@ export default function Home() {
                     {error}
                   </p>
                 ) : null}
-                <button className="btn" disabled={loading || wholesalePending || !form.productName.trim()} type="submit">
+                <button className="btn" disabled={loading || !form.productName.trim()} type="submit">
                   {loading ? "Searching live products..." : "Find Similar Items"}
                 </button>
-                {loading ? <p className="source-meta" role="status">Search in progress. Checking product pages and seller wholesale details can take several minutes.</p> : null}
+                {loading ? <p className="source-meta" role="status">{searchProgress}</p> : null}
               </form>
             </div>
           </section>
@@ -403,7 +350,6 @@ export default function Home() {
             <div className="panel-body">
               {response ? (
                 <>
-                  {wholesaleStatus ? <p className="source-meta" role="status">{wholesaleStatus}</p> : null}
                   <div className="estimate-grid">
                     <div className="metric">
                       <p className="metric-label">Price range</p>
@@ -430,7 +376,7 @@ export default function Home() {
                       {accepted.map((product) => (
                         <div className="detail-item" key={product.productUrl}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img className="product-thumb" src={product.imageUrl} alt={product.title} />
+                          {product.imageUrl ? <img className="product-thumb" src={product.imageUrl} alt={product.title} /> : <span className="source-meta">No image</span>}
                           <strong>{formatMoney(product.price, product.currency)}</strong>
                           <span>{product.title}</span>
                           <a href={product.productUrl} target="_blank" rel="noreferrer">
@@ -457,6 +403,7 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
+                  {response.skipped?.length ? <p className="source-meta">{response.skipped.length} page(s) omitted: {response.skipped.map((item) => item.reason).join("; ")}</p> : null}
 
                   <div className="table-wrap">
                     <table>
@@ -484,7 +431,7 @@ export default function Home() {
                               <td>
                                 <div className="source-item">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img className="product-thumb" src={product.imageUrl} alt={product.title} />
+                                  {product.imageUrl ? <img className="product-thumb" src={product.imageUrl} alt={product.title} /> : <span className="source-meta">No image</span>}
                                   <div>
                                     <p className="source-title">{product.title}</p>
                                     <p className="source-meta">
@@ -497,7 +444,7 @@ export default function Home() {
                               <td>{product.seller}</td>
                               <td>{formatMoney(product.price, product.currency)}</td>
                               <td>
-                                {wholesalePending ? <span>Checking...</span> : <MoqCell moq={product.moq} />}
+                                <span>Paused</span>
                               </td>
                               <td>
                                 <a href={product.productUrl} target="_blank" rel="noreferrer">
@@ -516,7 +463,7 @@ export default function Home() {
                   <div>
                     <div className="empty-icon">⌕</div>
                     <p>Enter a product and run a search to generate comparable market prices.</p>
-                    <p className="muted">Two retail sources, followed by a separate seller wholesale lookup.</p>
+                    <p className="muted">Two retail product sources.</p>
                   </div>
                 </div>
               )}
