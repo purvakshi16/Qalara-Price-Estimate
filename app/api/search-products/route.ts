@@ -42,6 +42,8 @@ const regionConfig: Record<Region, { currency: string; countryCode: "GB" | "US" 
 const MAX_VISIT = 15;
 const MAX_ESTIMATE_PRODUCTS = 10;
 const MAX_DISPLAY_PRODUCTS = 6;
+const TINYFISH_POLL_TIMEOUT_MS = 50_000;
+const TINYFISH_POLL_INTERVAL_MS = 3_000;
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -140,7 +142,7 @@ async function runTinyFishSearch(
     .filter(Boolean)
     .join(" ");
 
-  const response = await fetch("https://agent.tinyfish.ai/v1/automation/run", {
+  const startResponse = await fetch("https://agent.tinyfish.ai/v1/automation/run-async", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -157,21 +159,70 @@ async function runTinyFishSearch(
     }),
   });
 
-  const text = await response.text();
+  const startText = await startResponse.text();
 
-  if (!response.ok) {
-    throw new Error(`TinyFish request failed: ${response.status} ${safeErrorSnippet(text)}`);
+  if (!startResponse.ok) {
+    throw new Error(`TinyFish request failed: ${startResponse.status} ${safeErrorSnippet(startText)}`);
   }
 
+  const startPayload = parseJsonOrThrow(startText, "TinyFish start response");
+  const runId = stringValue((startPayload as Record<string, unknown>).run_id ?? (startPayload as Record<string, unknown>).runId);
+
+  if (!runId) {
+    throw new Error(`TinyFish did not return a run id: ${safeErrorSnippet(startText)}`);
+  }
+
+  return pollTinyFishRun(runId, apiKey);
+}
+
+async function pollTinyFishRun(runId: string, apiKey: string) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < TINYFISH_POLL_TIMEOUT_MS) {
+    await sleep(TINYFISH_POLL_INTERVAL_MS);
+
+    const response = await fetch(`https://agent.tinyfish.ai/v1/runs/${encodeURIComponent(runId)}`, {
+      headers: {
+        "X-API-Key": apiKey,
+      },
+    });
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`TinyFish run check failed: ${response.status} ${safeErrorSnippet(text)}`);
+    }
+
+    const run = parseJsonOrThrow(text, "TinyFish run response") as Record<string, unknown>;
+    const status = stringValue(run.status).toUpperCase();
+
+    if (status === "COMPLETED") {
+      return run;
+    }
+
+    if (status === "FAILED" || status === "CANCELLED" || status === "RUN_CREATION_FAILED") {
+      const error = typeof run.error === "string" ? run.error : JSON.stringify(run.error ?? {});
+      throw new Error(`TinyFish run ${status.toLowerCase()}: ${safeErrorSnippet(error)}`);
+    }
+  }
+
+  throw new Error("TinyFish search is still running. Please try again with a simpler product name or retry in a moment.");
+}
+
+function parseJsonOrThrow(text: string, label: string) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`TinyFish returned a non-JSON response: ${safeErrorSnippet(text)}`);
+    throw new Error(`${label} was not JSON: ${safeErrorSnippet(text)}`);
   }
 }
 
 function safeErrorSnippet(text: string) {
   return text.replace(/\s+/g, " ").trim().slice(0, 300) || "No response body";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeProducts(payload: unknown, fallbackCurrency: string): ProductResult[] {
