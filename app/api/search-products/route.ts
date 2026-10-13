@@ -58,7 +58,8 @@ export async function POST(request: Request) {
       providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
     ]);
     const visualCandidates = records(visualSearch.visual_matches).map((row) => ({ ...row, url: text(row.link), visualMatch: true,
-      sourceImage: text(asRecord(row.image).link) || text(row.thumbnail) })).filter((row) => isRetailCandidateUrl(text(row.url)));
+      sourceImage: text(asRecord(row.image).link) || text(row.thumbnail) }))
+      .filter((row) => isDirectProductUrl(text(row.url)) && !isNonPhysicalCandidate(text(asRecord(row).title)));
     const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url))).slice(0, GENERAL_SLOTS);
     const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceProductUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
     const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
@@ -161,6 +162,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   const $ = load(text(page.text));
   const heading = $("h1").first().text().trim();
   const title = heading || text(page.title) || text(candidate.title);
+  if (isNonPhysicalProductPage(title, $)) return null;
   const structuredProducts: RecordValue[] = [];
   for (const element of $('script[type="application/ld+json"]').toArray()) {
     let json: unknown;
@@ -189,7 +191,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   }
   if (price === null) {
     const metaCurrency = $("meta[property='product:price:currency'], meta[property='og:price:currency'], meta[itemprop='priceCurrency']").first().attr("content");
-    if (metaCurrency === currency) {
+    if (metaCurrency?.toUpperCase() === currency) {
       price = amount($("meta[property='product:price:amount'], meta[property='og:price:amount'], meta[itemprop='price']").first().attr("content"));
       if (price !== null) evidence = "Price from product page metadata.";
     }
@@ -264,7 +266,13 @@ function primaryPdpTextPrice($: ReturnType<typeof load>, heading: string, curren
     .filter((line) => !/shipping|delivery|postage|per count|per item|\/\s*(?:count|item|kg|metre)/i.test(line));
   const prices = productLines.flatMap((line) => currencyAmounts(line, currency));
   const unique = [...new Set(prices)];
-  return unique.length === 1 ? unique[0] : null;
+  if (unique.length === 1) return unique[0];
+  const primaryOffer = productLines.slice(0, 20).join(" ");
+  const primaryPrices = [...new Set(currencyAmounts(primaryOffer, currency))];
+  if (primaryPrices.length === 2 && /\b(?:sale|regular|original|was|now|buy from)\b/i.test(primaryOffer)) {
+    return Math.min(...primaryPrices);
+  }
+  return null;
 }
 function currencyAmounts(value: string, currency: string): number[] {
   const explicitCodes = value.toUpperCase().match(/\b(?:USD|EUR|GBP|CAD|AUD|INR)\b/g) ?? [];
@@ -310,6 +318,15 @@ function isRetailCandidateUrl(value: string) {
     return ["http:", "https:"].includes(url.protocol) && url.pathname !== "/" && !/(?:^|\.)(?:google|bing|duckduckgo|pinterest|youtube|facebook)\./i.test(url.hostname)
       && !/\/(?:blog|blogs|articles?|news)(?:\/|$)/i.test(url.pathname);
   } catch { return false; }
+}
+function isNonPhysicalCandidate(value: string) {
+  return /\b(?:free\s+)?(?:crochet|knitting|sewing)?\s*pattern\b|\b(?:pdf|digital)\s+download\b|\btutorial\b/i.test(value);
+}
+function isNonPhysicalProductPage(title: string, $: ReturnType<typeof load>) {
+  if (isNonPhysicalCandidate(title)) return true;
+  const primaryText = $("h1").first().nextAll().slice(0, 12).text().replace(/\s+/g, " ");
+  return /\bfree download\b|\bdownload(?:able)?\s+(?:pdf|pattern)\b|\bdigital\s+download\b/i.test(primaryText)
+    && /\bpattern\b/i.test(`${title} ${primaryText}`);
 }
 function isListingUrl(value: string) {
   const url = new URL(value);

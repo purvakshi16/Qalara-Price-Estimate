@@ -93,6 +93,19 @@ test('does not use a related-product card price as the PDP price', async () => {
   assert.equal((await api.POST(request())).status, 422);
 });
 
+test('rejects a free pattern page with accessory prices', async () => {
+  const html = '<h1>Free Fresh Mesh Crochet Tote Bag Pattern</h1><p>Free Download</p><section><h2>Accessories</h2><p>$6.34</p></section>';
+  const { api } = provider(html);
+  assert.equal((await api.POST(request())).status, 422);
+});
+
+test('uses the current sale price from an Endource-style primary offer', async () => {
+  const html = '<h1>HUSH Newport Woven Tote Bag</h1><p>£90.00 £45.00</p><p>buy from Hush</p><h2>Product Details</h2>';
+  const { api } = provider(html, { location: 'GB' });
+  const data = await (await api.POST(request('UK'))).json();
+  assert.equal(data.displayProducts[0].price, 45);
+});
+
 for (const [label, html] of [
   ['ambiguous variant prices', '<h1>Cotton tote</h1><p>$15.00</p><p>$20.00</p>'],
   ['shipping-only amount', '<h1>Cotton tote</h1><p>Shipping: $5.00</p>'],
@@ -168,7 +181,7 @@ test('uses direct marketplace product links and rejects marketplace filter pages
 });
 
 test('prioritizes visual matches and deletes the temporary image', async () => {
-  const visualUrl = 'https://visual-shop.example/item/cotton-tote-42';
+  const visualUrl = 'https://visual-shop.example/products/cotton-tote-42';
   let deletedReceipt = '';
   const api = route(async (endpoint, init) => {
     const parsed = new URL(endpoint);
@@ -191,6 +204,29 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
   assert.equal(data.searched.imageSearchRequested, true);
   assert.equal(data.searched.visualCandidatesSelected, 1);
   assert.equal(deletedReceipt, 'cleanup-receipt');
+});
+
+test('does not fetch visual listing pages or pattern candidates', async () => {
+  let fetchedUrls = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'www.searchapi.io') {
+      return Response.json({ visual_matches: [
+        { link: 'https://www.etsy.com/market/tote_bags', title: 'Tote bags' },
+        { link: 'https://patterns.example/products/free-tote', title: 'Free crochet tote pattern' },
+        { link: 'https://shop.example/products/real-tote', title: 'Handmade tote bag' },
+      ] });
+    }
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    fetchedUrls = JSON.parse(init.body).urls;
+    return Response.json({ results: [{ url: fetchedUrls[0], text: '<h1>Handmade tote bag</h1><p>$38.00</p>' }], errors: [] });
+  }, 'test-key', {
+    uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' }),
+    deleteReference: async () => undefined,
+  });
+  const response = await api.POST(request('US', { imageDataUrl: 'data:image/jpeg;base64,YQ==' }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(fetchedUrls, ['https://shop.example/products/real-tote']);
 });
 
 test('rejects a listing page containing multiple structured products', async () => {
