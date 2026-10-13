@@ -16,7 +16,7 @@ function provider(html, options = {}) {
       return Response.json({ results: marketplaceSearch ? (options.marketplaceResults ?? []) : (options.results ?? [{ url, title: 'Cotton tote' }]) });
     }
     const body = JSON.parse(init.body);
-    assert.ok(body.urls.length <= 12);
+    assert.ok(body.urls.length <= 6);
     assert.equal(body.format, 'html');
     return Response.json(options.fetchResult ?? { results: [{ url, title: 'Cotton tote', text: html }], errors: [] });
   };
@@ -117,7 +117,9 @@ for (const [label, html] of [
     const { api } = provider(html);
     const response = await api.POST(request());
     assert.equal(response.status, 422);
-    assert.equal((await response.json()).skipped.length, 1);
+    const data = await response.json();
+    assert.equal(data.searched.pagesAccessed, 1);
+    assert.equal(data.searched.validPagesFound, 0);
   });
 }
 
@@ -129,7 +131,7 @@ test('keeps successful page when another page is blocked', async () => {
   });
   const data = await (await api.POST(request())).json();
   assert.equal(data.displayProducts.length, 1);
-  assert.equal(data.skipped[0].reason, 'bot_blocked');
+  assert.equal(data.searched.pagesAccessed, 1);
 });
 
 test('filters search-engine links without fetching them', async () => {
@@ -155,9 +157,9 @@ test('reserves marketplace candidates alongside general seller pages', async () 
     return Response.json({ results: fetchedUrls.map((pageUrl) => ({ url: pageUrl, text: '<h1>Tote</h1><p>$20.00</p>' })), errors: [] });
   });
   const data = await (await api.POST(request())).json();
-  assert.equal(fetchedUrls.length, 8);
+  assert.equal(fetchedUrls.length, 6);
   assert.equal(fetchedUrls.filter((pageUrl) => /amazon|etsy|ebay/.test(pageUrl)).length, 3);
-  assert.equal(data.searched.marketplaceCandidatesSelected, 3);
+  assert.equal(data.searched.validPagesFound, 6);
 });
 
 test('uses direct marketplace product links and rejects marketplace filter pages', async () => {
@@ -177,7 +179,6 @@ test('uses direct marketplace product links and rejects marketplace filter pages
   const data = await (await api.POST(request())).json();
   assert.deepEqual(fetchedUrls, ['https://www.amazon.com/dp/B0DIRECT123']);
   assert.equal(data.displayProducts[0].productUrl, 'https://www.amazon.com/dp/B0DIRECT123');
-  assert.equal(data.searched.marketplaceCandidatesSelected, 1);
 });
 
 test('prioritizes visual matches and deletes the temporary image', async () => {
@@ -201,8 +202,8 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
   const data = await response.json();
   assert.equal(data.displayProducts[0].productUrl, visualUrl);
   assert.equal(data.displayProducts[0].imageUrl, 'https://visual-shop.example/tote.jpg');
-  assert.equal(data.searched.imageSearchRequested, true);
-  assert.equal(data.searched.visualCandidatesSelected, 1);
+  assert.equal(data.imageSearchRequested, true);
+  assert.equal(data.searched.visualMatchesReturned, 1);
   assert.equal(deletedReceipt, 'cleanup-receipt');
 });
 
@@ -263,7 +264,29 @@ test('rejects a listing page containing multiple structured products', async () 
   });
   const response = await api.POST(request());
   assert.equal(response.status, 422);
-  assert.equal((await response.json()).skipped.length, 1);
+  assert.equal((await response.json()).searched.validPagesFound, 0);
+});
+
+test('continues through every candidate batch until candidates are exhausted', async () => {
+  const candidates = Array.from({ length: 14 }, (_, index) => ({
+    url: `https://seller${index}.example/products/tote`, title: `Cotton tote ${index}`,
+  }));
+  const visited = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.search.tinyfish.ai') {
+      return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? [] : candidates });
+    }
+    const urls = JSON.parse(init.body).urls;
+    visited.push(...urls);
+    return Response.json({ results: urls.map((pageUrl) => ({ url: pageUrl, text: '<h1>Cotton tote</h1><p>Price unavailable</p>' })), errors: [] });
+  });
+  const response = await api.POST(request());
+  assert.equal(response.status, 422);
+  assert.equal(visited.length, 14);
+  const data = await response.json();
+  assert.deepEqual(Object.keys(data.searched).sort(), ['pagesAccessed', 'validPagesFound', 'visualMatchesReturned']);
+  assert.equal(data.searched.pagesAccessed, 14);
 });
 
 test('stops at allowance error with no retries or paid fallback', async () => {

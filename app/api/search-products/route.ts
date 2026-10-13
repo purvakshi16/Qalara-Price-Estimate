@@ -17,24 +17,23 @@ const regions = {
   UK: { currency: "GBP", location: "GB", language: "en", market: "United Kingdom", marketplaceDomains: ["amazon.co.uk", "etsy.com", "ebay.co.uk", "alibaba.com"] },
   EU: { currency: "EUR", location: "DE", language: "de", market: "Germany", marketplaceDomains: ["amazon.de", "etsy.com", "ebay.de", "alibaba.com"] },
 };
-const MAX_CANDIDATES = 12;
-const MAX_DISPLAYED_PRODUCTS = 7;
-const VISUAL_SLOTS = 6;
-const GENERAL_SLOTS = 7;
-const MARKETPLACE_SLOTS = 5;
+const TARGET_VALID_PDPS = 6;
+const FETCH_BATCH_SIZE = 6;
+const SEARCH_BUDGET_MS = 50_000;
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
   let cleanupReceipt = "";
   try {
+    const deadline = Date.now() + SEARCH_BUDGET_MS;
     const input = await request.json() as SearchRequest;
     if (input.stage === "wholesale") return NextResponse.json({ error: "Wholesale lookup is paused." }, { status: 400 });
     if (typeof input.productName !== "string" || !input.productName.trim()) return NextResponse.json({ error: "Product name is required." }, { status: 400 });
     const config = regions[input.region] ?? regions.US;
     const apiKey = getApiKey();
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
-    const signal = AbortSignal.timeout(50_000);
+    const signal = AbortSignal.timeout(SEARCH_BUDGET_MS);
     const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
     let visualSearch: RecordValue = {};
     if (input.imageDataUrl) {
@@ -65,51 +64,46 @@ export async function POST(request: Request) {
         && isRegionCandidate(row, input.region, config.currency));
     const generalCandidates = rankedCandidates(generalSearch)
       .filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency))
-      .slice(0, GENERAL_SLOTS);
+      ;
     const marketplaceCandidates = rankedCandidates(marketplaceSearch)
       .filter((row) => isMarketplaceProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency))
-      .slice(0, MARKETPLACE_SLOTS);
-    const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
-    const candidatePool = input.imageDataUrl
-      ? [...visualCandidates.slice(0, VISUAL_SLOTS), ...generalCandidates.slice(0, 3), ...marketplaceCandidates.slice(0, 3)]
-      : [...generalCandidates, ...marketplaceCandidates];
-    const unique = dedupeCandidates(candidatePool).slice(0, MAX_CANDIDATES);
+      ;
+    const unique = interleaveCandidates([visualCandidates, generalCandidates, marketplaceCandidates]);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
-    const fetched = await providerJson("https://api.fetch.tinyfish.ai", apiKey, signal, {
-      urls: unique.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 30_000,
-      purpose: "Read the main retail product's current price, currency, product image and listed seller. Do not research wholesale.",
-    });
     const products: ProductResult[] = [];
-    const skipped = records(fetched.errors).map((row) => ({ url: text(row.url), reason: text(row.error) || "Page could not be fetched." }));
-    for (const page of records(fetched.results)) {
-      const candidate = unique.find((row) => text(row.url) === text(page.url));
-      if (!candidate) continue;
-      const product = extractProduct(page, candidate, config.currency);
-      if (product) products.push(product);
-      else skipped.push({ url: text(page.url), reason: "No unambiguous retail price in the requested currency was found." });
+    let pagesAccessed = 0;
+    let cursor = 0;
+    while (products.length < TARGET_VALID_PDPS && cursor < unique.length && Date.now() < deadline - 4_000) {
+      const batch = unique.slice(cursor, cursor + FETCH_BATCH_SIZE);
+      cursor += batch.length;
+      let fetched: RecordValue;
+      try {
+        fetched = await providerJson("https://api.fetch.tinyfish.ai", apiKey, signal, {
+          urls: batch.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 20_000,
+          purpose: "Read the main retail product's current price, currency, product image and listed seller. Do not research wholesale.",
+        });
+      } catch (error) {
+        if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) break;
+        throw error;
+      }
+      const fetchedPages = records(fetched.results);
+      pagesAccessed += fetchedPages.length;
+      for (const page of fetchedPages) {
+        const candidate = batch.find((row) => text(row.url) === text(page.url));
+        if (!candidate) continue;
+        const product = extractProduct(page, candidate, config.currency);
+        if (product) products.push(product);
+        if (products.length === TARGET_VALID_PDPS) break;
+      }
     }
     const searched = {
-      maxVisitedLinks: MAX_CANDIDATES,
-      searchResultsReturned: records(generalSearch.results).length + records(marketplaceSearch.results).length,
-      generalSearchResults: records(generalSearch.results).length,
-      marketplaceSearchResults: records(marketplaceSearch.results).length,
-      directProductCandidates: dedupeCandidates(allCandidates).length,
-      marketplaceCandidatesSelected: unique.filter((row) => isMarketplaceProductUrl(text(row.url))).length,
-      visitedLinks: unique.length,
-      fetchedPages: records(fetched.results).length,
-      validPricePages: products.length,
-      rejectedPages: skipped.length,
-      maxEstimateProducts: MAX_DISPLAYED_PRODUCTS,
-      maxDisplayedSources: MAX_DISPLAYED_PRODUCTS,
-      imageSearchRequested: Boolean(input.imageDataUrl),
-      visualMatchesReturned: visualCandidates.length,
-      visualCandidatesSelected: unique.filter((row) => row.visualMatch === true).length,
+      visualMatchesReturned: records(visualSearch.visual_matches).length,
+      pagesAccessed,
+      validPagesFound: products.length,
     };
-    if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", skipped, searched }, { status: 422 });
+    if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", searched }, { status: 422 });
     return NextResponse.json({
-      generatedAt: new Date().toISOString(), region: input.region, currency: config.currency, providerMode: "search-fetch",
-      estimateProducts: products, displayProducts: products.slice(0, MAX_DISPLAYED_PRODUCTS), rawCount: products.length, skipped,
-      searched,
+      currency: config.currency, displayProducts: products, imageSearchRequested: Boolean(input.imageDataUrl), searched,
     });
   } catch (error) {
     const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
@@ -319,6 +313,14 @@ function rankedCandidates(search: RecordValue) {
 }
 function dedupeCandidates(rows: RecordValue[]) {
   return rows.filter((row, index) => rows.findIndex((other) => text(other.url).split("#")[0] === text(row.url).split("#")[0]) === index);
+}
+function interleaveCandidates(groups: RecordValue[][]) {
+  const rows: RecordValue[] = [];
+  const longest = Math.max(0, ...groups.map((group) => group.length));
+  for (let index = 0; index < longest; index++) {
+    for (const group of groups) if (group[index]) rows.push(group[index]);
+  }
+  return dedupeCandidates(rows);
 }
 function resolveUrl(value: string, base: string) { try { const url = new URL(value, base); return value && ["http:", "https:"].includes(url.protocol) ? url.toString() : ""; } catch { return ""; } }
 function hasProductPath(url: string) { return /\/(?:products?|product-detail|dp|gp\/product|ip|itm|listing|p)\//i.test(new URL(url).pathname); }

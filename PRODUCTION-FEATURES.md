@@ -1,6 +1,6 @@
 # Market Price Estimator: Production Features
 
-Last updated: 12 October 2026
+Last updated: 13 October 2026
 
 This document records the functionality intended to be active in the current production application. It should be updated alongside every production-facing feature change.
 
@@ -19,20 +19,21 @@ This document records the functionality intended to be active in the current pro
 - Uses the product name, description, material and selected region to search only for direct retail product-detail pages (PDPs).
 - Uses free search and page-fetch operations only. Paid browser-agent fallback is disabled.
 - Runs one general retail search and one region-aware marketplace search.
-- Selects up to four general retail/seller pages and up to three recognized marketplace pages, then deduplicates and fetches no more than seven pages in total.
+- Applies no fixed candidate or marketplace-page cap. It interleaves visual, general retail and marketplace PDP candidates, fetches them in operational batches, and stops when six valid PDPs are found, all returned candidates are exhausted or the Vercel-safe execution deadline is reached.
 - Marketplace discovery targets Amazon, Etsy, eBay and Alibaba using the appropriate Amazon/eBay domain for the selected region.
-- Marketplace candidates must be direct product-detail URLs. Marketplace search, category, filter and collection pages are excluded from the three reserved marketplace slots.
+- Marketplace candidates must be direct product-detail URLs. Marketplace search, category, filter and collection pages are excluded.
+- Candidate domains, country signals and currencies are checked against the selected US, UK or EU market before a page is fetched.
 - Extracts retail price evidence in layers: structured `Product` offers, explicit product-price metadata (including Shopify Open Graph fields), recognized primary-price elements, and finally unambiguous currency-marked price text near the PDP heading. Crossed-out, shipping, related-product and conflicting prices are excluded.
 - Skips pages when the required structured data or product metadata is inaccessible. Visible currency text alone is not accepted as proof of a product price.
 - Rejects PLPs, homepages, seller profiles, search pages, categories, collections and filtered result pages.
 - Returns the specific product-detail-page link rather than a general search-results link.
-- Omits inaccessible pages and pages without an unambiguous price, and reports the omission reason.
+- Omits inaccessible pages and pages without an unambiguous price.
 
 ## Estimate Summary
 
 - **Price range:** Lowest and highest retail prices across the usable PDPs returned by the search.
-- **Search diagnostics:** Separates general and marketplace search counts and shows direct-product candidates, selected marketplace pages, fetched pages, valid retail prices and rejected pages. Rejected-page links and reasons are listed when available.
-- Image searches also report returned and selected visual-match counts. Each displayed result has session-only Relevant / Not relevant review controls and a live accuracy percentage; this feedback is not stored.
+- **Search diagnostics:** Shows only visual matches returned, pages successfully accessed and valid product pages found.
+- Each displayed image-search result has session-only Relevant / Not relevant review controls and a live accuracy percentage; this feedback is not stored.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.
 

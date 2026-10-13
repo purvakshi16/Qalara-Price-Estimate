@@ -28,27 +28,13 @@ type MoqEvidence = {
 };
 
 type SearchResponse = {
-  generatedAt: string;
   currency: string;
-  estimateProducts: ProductResult[];
   displayProducts: ProductResult[];
-  skipped?: { url: string; reason: string }[];
+  imageSearchRequested: boolean;
   searched: {
-    maxVisitedLinks: number;
-    searchResultsReturned: number;
-    generalSearchResults: number;
-    marketplaceSearchResults: number;
-    directProductCandidates: number;
-    visitedLinks: number;
-    fetchedPages: number;
-    validPricePages: number;
-    rejectedPages: number;
-    marketplaceCandidatesSelected: number;
-    maxEstimateProducts: number;
-    maxDisplayedSources: number;
-    imageSearchRequested: boolean;
-    visualMatchesReturned?: number;
-    visualCandidatesSelected?: number;
+    visualMatchesReturned: number;
+    pagesAccessed: number;
+    validPagesFound: number;
   };
 };
 
@@ -92,11 +78,11 @@ export default function Home() {
   const [error, setError] = useState("");
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [searchProgress, setSearchProgress] = useState("");
-  const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched" | "skipped"> | null>(null);
+  const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched"> | null>(null);
   const [reviews, setReviews] = useState<Record<string, "relevant" | "not-relevant">>({});
 
   const estimate = useMemo(() => {
-    const products = response?.estimateProducts ?? [];
+    const products = response?.displayProducts ?? [];
     const minimums = products.map((product) => product.minPrice ?? product.price);
     const maximums = products.map((product) => product.maxPrice ?? product.price);
     const currency = response?.currency ?? (form.region === "UK" ? "GBP" : form.region === "US" ? "USD" : "EUR");
@@ -165,13 +151,12 @@ export default function Home() {
       }
 
       if (!res.ok) {
-        if (payload.searched) setLastDiagnostics({ searched: payload.searched, skipped: payload.skipped });
-        const reasons = payload.skipped?.map((item: { reason: string }) => item.reason).join("; ");
-        throw new Error([payload.error ?? "Search failed.", reasons].filter(Boolean).join(" "));
+        if (payload.searched) setLastDiagnostics({ searched: payload.searched });
+        throw new Error(payload.error ?? "Search failed.");
       }
 
       setResponse(payload);
-      setLastDiagnostics({ searched: payload.searched, skipped: payload.skipped });
+      setLastDiagnostics({ searched: payload.searched });
     } catch (searchError) {
       if (searchError instanceof DOMException && searchError.name === "AbortError") {
         setError("Search timed out while reading product pages. No paid automation was started.");
@@ -354,13 +339,13 @@ export default function Home() {
                       <p className="metric-value">
                         {formatMoney(estimate.min, estimate.currency)} - {formatMoney(estimate.max, estimate.currency)}
                       </p>
-                      <p className="metric-note">From up to {response.searched.maxEstimateProducts} priced products</p>
+                      <p className="metric-note">From {response.displayProducts.length} valid product pages</p>
                     </div>
                   </div>
 
                   <SearchDiagnostics diagnostics={lastDiagnostics} />
 
-                  {response.searched.imageSearchRequested ? (
+                  {response.imageSearchRequested ? (
                     <div className="review-summary" aria-live="polite">
                       <strong>Visual-match accuracy: {reviewSummary.reviewed ? `${reviewSummary.accuracy}%` : "Not reviewed"}</strong>
                       <span>{reviewSummary.relevant} relevant out of {reviewSummary.reviewed} reviewed results</span>
@@ -370,12 +355,9 @@ export default function Home() {
                   <div className="results-header">
                     <div>
                       <h2 className="panel-title">Candidate Sources</h2>
-                      <p className="source-meta">
-                        Visited up to {response.searched.maxVisitedLinks} links. Showing top {response.displayProducts.length} source rows.
-                      </p>
+                      <p className="source-meta">Showing {response.displayProducts.length} valid product pages.</p>
                     </div>
                   </div>
-                  {response.skipped?.length ? <p className="source-meta">{response.skipped.length} page(s) omitted: {response.skipped.map((item) => item.reason).join("; ")}</p> : null}
 
                   <div className="table-wrap">
                     <table>
@@ -387,7 +369,7 @@ export default function Home() {
                           <th>Seller</th>
                           <th>Price</th>
                           <th>MOQ</th>
-                          {response.searched.imageSearchRequested ? <th>Review</th> : null}
+                          {response.imageSearchRequested ? <th>Review</th> : null}
                           <th>Open</th>
                         </tr>
                       </thead>
@@ -414,7 +396,7 @@ export default function Home() {
                               <td>
                                 <span>Paused</span>
                               </td>
-                              {response.searched.imageSearchRequested ? (
+                              {response.imageSearchRequested ? (
                                 <td>
                                   <div className="relevance-control" aria-label={`Review ${product.title}`}>
                                     <button type="button" className={reviews[product.productUrl] === "relevant" ? "active" : ""}
@@ -442,7 +424,7 @@ export default function Home() {
                   <div>
                     <div className="empty-icon">⌕</div>
                     <p>Enter a product and run a search to generate comparable market prices.</p>
-                    <p className="muted">Checks up to seven retail product sources.</p>
+                    <p className="muted">Searches until six valid product pages are found, candidates are exhausted or time runs out.</p>
                   </div>
                 </div>
               )}
@@ -454,32 +436,17 @@ export default function Home() {
   );
 }
 
-function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, "searched" | "skipped"> | null }) {
+function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, "searched"> | null }) {
   if (!diagnostics) return null;
-  const { searched, skipped = [] } = diagnostics;
+  const { searched } = diagnostics;
   return (
     <section className="diagnostics" aria-labelledby="diagnostics-title">
       <h2 id="diagnostics-title" className="panel-title">Search diagnostics</h2>
       <div className="diagnostic-grid">
-        {searched.imageSearchRequested ? <div><strong>{searched.visualMatchesReturned ?? 0}</strong><span>Visual matches returned</span></div> : null}
-        {searched.imageSearchRequested ? <div><strong>{searched.visualCandidatesSelected ?? 0}</strong><span>Visual candidates selected</span></div> : null}
-        <div><strong>{searched.searchResultsReturned}</strong><span>Search results returned</span></div>
-        <div><strong>{searched.generalSearchResults}</strong><span>General search results</span></div>
-        <div><strong>{searched.marketplaceSearchResults}</strong><span>Marketplace search results</span></div>
-        <div><strong>{searched.directProductCandidates}</strong><span>Direct product candidates</span></div>
-        <div><strong>{searched.visitedLinks}</strong><span>Pages selected</span></div>
-        <div><strong>{searched.marketplaceCandidatesSelected}</strong><span>Marketplace pages selected</span></div>
-        <div><strong>{searched.fetchedPages}</strong><span>Pages fetched</span></div>
-        <div><strong>{searched.validPricePages}</strong><span>Valid retail prices</span></div>
-        <div><strong>{searched.rejectedPages}</strong><span>Rejected pages</span></div>
+        <div><strong>{searched.visualMatchesReturned}</strong><span>Visual matches returned</span></div>
+        <div><strong>{searched.pagesAccessed}</strong><span>Pages accessed</span></div>
+        <div><strong>{searched.validPagesFound}</strong><span>Valid product pages found</span></div>
       </div>
-      {skipped.length ? (
-        <div className="diagnostic-list">
-          {skipped.map((item) => (
-            <p key={`${item.url}-${item.reason}`}><a href={item.url} target="_blank" rel="noreferrer">Rejected page</a><span>{item.reason}</span></p>
-          ))}
-        </div>
-      ) : <p className="source-meta">No selected pages were rejected.</p>}
     </section>
   );
 }
