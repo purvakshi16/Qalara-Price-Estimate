@@ -17,9 +17,11 @@ const regions = {
   UK: { currency: "GBP", location: "GB", language: "en", market: "United Kingdom", marketplaceDomains: ["amazon.co.uk", "etsy.com", "ebay.co.uk", "alibaba.com"] },
   EU: { currency: "EUR", location: "DE", language: "de", market: "Germany", marketplaceDomains: ["amazon.de", "etsy.com", "ebay.de", "alibaba.com"] },
 };
-const MAX_PRODUCTS = 7;
-const GENERAL_SLOTS = 4;
-const MARKETPLACE_SLOTS = 3;
+const MAX_CANDIDATES = 12;
+const MAX_DISPLAYED_PRODUCTS = 7;
+const VISUAL_SLOTS = 6;
+const GENERAL_SLOTS = 7;
+const MARKETPLACE_SLOTS = 5;
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -63,7 +65,10 @@ export async function POST(request: Request) {
     const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url))).slice(0, GENERAL_SLOTS);
     const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceProductUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
     const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
-    const unique = dedupeCandidates([...visualCandidates, ...generalCandidates, ...marketplaceCandidates]).slice(0, MAX_PRODUCTS);
+    const candidatePool = input.imageDataUrl
+      ? [...visualCandidates.slice(0, VISUAL_SLOTS), ...generalCandidates.slice(0, 3), ...marketplaceCandidates.slice(0, 3)]
+      : [...generalCandidates, ...marketplaceCandidates];
+    const unique = dedupeCandidates(candidatePool).slice(0, MAX_CANDIDATES);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
     const fetched = await providerJson("https://api.fetch.tinyfish.ai", apiKey, signal, {
       urls: unique.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 30_000,
@@ -79,7 +84,7 @@ export async function POST(request: Request) {
       else skipped.push({ url: text(page.url), reason: "No unambiguous retail price in the requested currency was found." });
     }
     const searched = {
-      maxVisitedLinks: MAX_PRODUCTS,
+      maxVisitedLinks: MAX_CANDIDATES,
       searchResultsReturned: records(generalSearch.results).length + records(marketplaceSearch.results).length,
       generalSearchResults: records(generalSearch.results).length,
       marketplaceSearchResults: records(marketplaceSearch.results).length,
@@ -89,8 +94,8 @@ export async function POST(request: Request) {
       fetchedPages: records(fetched.results).length,
       validPricePages: products.length,
       rejectedPages: skipped.length,
-      maxEstimateProducts: MAX_PRODUCTS,
-      maxDisplayedSources: MAX_PRODUCTS,
+      maxEstimateProducts: MAX_DISPLAYED_PRODUCTS,
+      maxDisplayedSources: MAX_DISPLAYED_PRODUCTS,
       imageSearchRequested: Boolean(input.imageDataUrl),
       visualMatchesReturned: visualCandidates.length,
       visualCandidatesSelected: unique.filter((row) => row.visualMatch === true).length,
@@ -98,7 +103,7 @@ export async function POST(request: Request) {
     if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", skipped, searched }, { status: 422 });
     return NextResponse.json({
       generatedAt: new Date().toISOString(), region: input.region, currency: config.currency, providerMode: "search-fetch",
-      estimateProducts: products, displayProducts: products, rawCount: products.length, skipped,
+      estimateProducts: products, displayProducts: products.slice(0, MAX_DISPLAYED_PRODUCTS), rawCount: products.length, skipped,
       searched,
     });
   } catch (error) {

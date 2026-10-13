@@ -16,7 +16,7 @@ function provider(html, options = {}) {
       return Response.json({ results: marketplaceSearch ? (options.marketplaceResults ?? []) : (options.results ?? [{ url, title: 'Cotton tote' }]) });
     }
     const body = JSON.parse(init.body);
-    assert.ok(body.urls.length <= 7);
+    assert.ok(body.urls.length <= 12);
     assert.equal(body.format, 'html');
     return Response.json(options.fetchResult ?? { results: [{ url, title: 'Cotton tote', text: html }], errors: [] });
   };
@@ -155,7 +155,7 @@ test('reserves marketplace candidates alongside general seller pages', async () 
     return Response.json({ results: fetchedUrls.map((pageUrl) => ({ url: pageUrl, text: '<h1>Tote</h1><p>$20.00</p>' })), errors: [] });
   });
   const data = await (await api.POST(request())).json();
-  assert.equal(fetchedUrls.length, 7);
+  assert.equal(fetchedUrls.length, 8);
   assert.equal(fetchedUrls.filter((pageUrl) => /amazon|etsy|ebay/.test(pageUrl)).length, 3);
   assert.equal(data.searched.marketplaceCandidatesSelected, 3);
 });
