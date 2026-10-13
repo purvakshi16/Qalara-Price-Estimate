@@ -46,15 +46,16 @@ Each result row contains:
 3. **Marketplace:** Known platforms are labelled Amazon, eBay, Etsy or Alibaba. Independent retail domains are labelled "Seller website."
 4. **Seller:** Seller name found on the product page. Shows "Not listed" when unavailable.
 5. **Price:** Extracted retail price in the selected region's currency.
-6. **MOQ:** Currently paused while wholesale lookup is deferred.
-7. **Open:** Direct link to the matched retail product page.
+
+The Source item title is the direct link to the matched retail product page; there is no separate Open column.
 
 ## Downloads
 
 - A single **Download** button opens the available PDF and Excel CSV options.
 - The button remains disabled until search results are available.
-- CSV output includes the image URL, marketplace, seller, title, retail price, currency, MOQ fields, product URL and extraction notes.
+- CSV output includes the image URL, marketplace, seller, title, retail price, currency, product URL and extraction notes.
 - PDF output prints the current estimate view through the browser's print-to-PDF flow.
+- PDF and CSV filenames use the searched product name and selected region.
 
 ## Interface Shape
 
@@ -63,6 +64,5 @@ Each result row contains:
 ## Currently Paused
 
 - Promotion of image search to the primary required field; this remains experimental until reviewed accuracy reaches at least 60%.
-- Wholesale seller research.
-- Product-specific MOQ and wholesale-price extraction.
+- Wholesale seller research, MOQ and wholesale-price extraction.
 - Persistent storage of searches or results.

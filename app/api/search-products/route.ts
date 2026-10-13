@@ -9,7 +9,7 @@ type SearchRequest = { productName: string; description?: string; material?: str
 type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
-  productUrl: string; imageUrl: string; similarity: number; moq: null; notes: string;
+  productUrl: string; imageUrl: string; similarity: number; notes: string;
   minPrice: number; maxPrice: number; pageType: "PDP";
 };
 const regions = {
@@ -226,7 +226,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     }
     if (!imageUrl) imageUrl = text(candidate.sourceImage);
   }
-  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, moq: null, pageType: "PDP", notes: evidence };
+  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, pageType: "PDP", notes: evidence };
 }
 
 function amount(value: unknown): number | null {

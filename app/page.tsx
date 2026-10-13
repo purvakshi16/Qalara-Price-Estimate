@@ -13,18 +13,10 @@ type ProductResult = {
   productUrl: string;
   imageUrl: string;
   similarity: number;
-  moq: MoqEvidence | null;
   notes: string;
   minPrice: number;
   maxPrice: number;
   pageType: "PDP";
-};
-
-type MoqEvidence = {
-  suggestedMoq: string;
-  wholesalePrice: string;
-  sourceLabel: string;
-  sourceUrl: string;
 };
 
 type SearchResponse = {
@@ -180,10 +172,6 @@ export default function Home() {
       "Lowest Retail Price",
       "Highest Retail Price",
       "Currency",
-      "Suggested MOQ",
-      "Wholesale Price",
-      "MOQ Source",
-      "MOQ Source URL",
       "Retail Product URL",
       "Notes",
     ];
@@ -196,10 +184,6 @@ export default function Home() {
       product.minPrice ?? product.price,
       product.maxPrice ?? product.price,
       product.currency,
-      product.moq?.suggestedMoq ?? "Not found",
-      product.moq?.wholesalePrice ?? "",
-      product.moq?.sourceLabel ?? "",
-      product.moq?.sourceUrl ?? "",
       product.productUrl,
       product.notes,
     ]);
@@ -207,7 +191,7 @@ export default function Home() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${form.productName || "price-estimate"}-${form.region}.csv`;
+    link.download = `${downloadFileName(form.productName, form.region)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -234,7 +218,7 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setDownloadOpen(false);
-                  window.print();
+                  exportPdf(form.productName, form.region);
                 }}
               >
                 PDF
@@ -368,9 +352,7 @@ export default function Home() {
                           <th>Marketplace</th>
                           <th>Seller</th>
                           <th>Price</th>
-                          <th>MOQ</th>
                           {response.imageSearchRequested ? <th>Review</th> : null}
-                          <th>Open</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -383,7 +365,9 @@ export default function Home() {
                               <td>
                                 <div className="source-item">
                                   <div>
-                                    <p className="source-title">{product.title}</p>
+                                    <p className="source-title">
+                                      <a href={product.productUrl} target="_blank" rel="noreferrer">{product.title}</a>
+                                    </p>
                                     <p className="source-meta">
                                       {product.marketplace}. {product.notes}
                                     </p>
@@ -393,9 +377,6 @@ export default function Home() {
                               <td>{product.marketplace}</td>
                               <td>{product.seller}</td>
                               <td>{formatProductPrice(product)}</td>
-                              <td>
-                                <span>Paused</span>
-                              </td>
                               {response.imageSearchRequested ? (
                                 <td>
                                   <div className="relevance-control" aria-label={`Review ${product.title}`}>
@@ -406,11 +387,6 @@ export default function Home() {
                                   </div>
                                 </td>
                               ) : null}
-                              <td>
-                                <a href={product.productUrl} target="_blank" rel="noreferrer">
-                                  Product
-                                </a>
-                              </td>
                             </tr>
                         ))}
                       </tbody>
@@ -457,23 +433,14 @@ function formatProductPrice(product: ProductResult) {
   return min === max ? formatMoney(min, product.currency) : `${formatMoney(min, product.currency)} - ${formatMoney(max, product.currency)}`;
 }
 
-function MoqCell({ moq }: { moq: MoqEvidence | null }) {
-  if (!moq) return <span className="moq-not-found">Not found</span>;
+function downloadFileName(productName: string, region: Region) {
+  const safeProductName = productName.trim().replace(/[\\/:*?"<>|]+/g, "-") || "price-estimate";
+  return `${safeProductName} - ${region}`;
+}
 
-  return (
-    <div className="moq-cell">
-      <div>
-        <strong>Suggested MOQ:</strong> {moq.suggestedMoq}
-      </div>
-      <div>
-        <strong>Wholesale price:</strong> {moq.wholesalePrice}
-      </div>
-      <div>
-        <strong>Source:</strong>{" "}
-        <a href={moq.sourceUrl} target="_blank" rel="noreferrer">
-          {moq.sourceLabel}
-        </a>
-      </div>
-    </div>
-  );
+function exportPdf(productName: string, region: Region) {
+  const originalTitle = document.title;
+  document.title = downloadFileName(productName, region);
+  window.addEventListener("afterprint", () => { document.title = originalTitle; }, { once: true });
+  window.print();
 }
