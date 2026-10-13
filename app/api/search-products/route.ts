@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       const uploaded = await uploadReference(input.imageDataUrl);
       cleanupReceipt = uploaded.receipt;
       const params = new URLSearchParams({ engine: "google_lens", search_type: "visual_matches", url: uploaded.url,
-        q: [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 100)].filter(Boolean).join(" "),
+        q: [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 100), config.market, config.currency].filter(Boolean).join(" "),
         country: config.location, hl: config.language,
       });
       visualSearch = await searchApiJson(`https://www.searchapi.io/api/v1/search?${params}`, searchApiKey, signal);
@@ -61,9 +61,14 @@ export async function POST(request: Request) {
     ]);
     const visualCandidates = records(visualSearch.visual_matches).map((row) => ({ ...row, url: text(row.link), visualMatch: true,
       sourceImage: text(asRecord(row.image).link) || text(row.thumbnail) }))
-      .filter((row) => isDirectProductUrl(text(row.url)) && !isNonPhysicalCandidate(text(asRecord(row).title)));
-    const generalCandidates = rankedCandidates(generalSearch).filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url))).slice(0, GENERAL_SLOTS);
-    const marketplaceCandidates = rankedCandidates(marketplaceSearch).filter((row) => isMarketplaceProductUrl(text(row.url))).slice(0, MARKETPLACE_SLOTS);
+      .filter((row) => isDirectProductUrl(text(row.url)) && !isNonPhysicalCandidate(text(asRecord(row).title))
+        && isRegionCandidate(row, input.region, config.currency));
+    const generalCandidates = rankedCandidates(generalSearch)
+      .filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency))
+      .slice(0, GENERAL_SLOTS);
+    const marketplaceCandidates = rankedCandidates(marketplaceSearch)
+      .filter((row) => isMarketplaceProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency))
+      .slice(0, MARKETPLACE_SLOTS);
     const allCandidates = [...rankedCandidates(generalSearch), ...rankedCandidates(marketplaceSearch)];
     const candidatePool = input.imageDataUrl
       ? [...visualCandidates.slice(0, VISUAL_SLOTS), ...generalCandidates.slice(0, 3), ...marketplaceCandidates.slice(0, 3)]
@@ -332,6 +337,26 @@ function isNonPhysicalProductPage(title: string, $: ReturnType<typeof load>) {
   const primaryText = $("h1").first().nextAll().slice(0, 12).text().replace(/\s+/g, " ");
   return /\bfree download\b|\bdownload(?:able)?\s+(?:pdf|pattern)\b|\bdigital\s+download\b/i.test(primaryText)
     && /\bpattern\b/i.test(`${title} ${primaryText}`);
+}
+function isRegionCandidate(row: RecordValue, region: Region, currency: string) {
+  const value = text(row.url) || text(row.link);
+  let host = "";
+  try { host = new URL(value).hostname.toLowerCase().replace(/^www\./, ""); } catch { return false; }
+  const signals = [row.title, row.snippet, row.description, row.source, row.price]
+    .map((entry) => typeof entry === "string" ? entry : text(asRecord(entry).value)).join(" ");
+  if (/\b(?:INR|India)\b|₹|\bRs\.?\s*\d/i.test(signals) || /(?:^|\.)co\.in$|(?:^|\.)in$/.test(host)) return false;
+  const currencySignals = signals.toUpperCase().match(/\b(?:USD|EUR|GBP|CAD|AUD|INR)\b/g) ?? [];
+  if (currencySignals.some((candidateCurrency) => candidateCurrency !== currency)) return false;
+  const suffix = countrySuffix(host);
+  if (!suffix) return true;
+  if (region === "US") return suffix === "us";
+  if (region === "UK") return suffix === "uk";
+  return EU_SUFFIXES.has(suffix);
+}
+const EU_SUFFIXES = new Set(["at", "be", "bg", "hr", "cy", "cz", "de", "dk", "ee", "es", "eu", "fi", "fr", "gr", "hu", "ie", "it", "lt", "lu", "lv", "mt", "nl", "pl", "pt", "ro", "se", "si", "sk"]);
+function countrySuffix(host: string) {
+  const suffix = host.split(".").at(-1) ?? "";
+  return suffix.length === 2 ? suffix : "";
 }
 function isListingUrl(value: string) {
   const url = new URL(value);

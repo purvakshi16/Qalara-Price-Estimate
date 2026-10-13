@@ -229,6 +229,26 @@ test('does not fetch visual listing pages or pattern candidates', async () => {
   assert.deepEqual(fetchedUrls, ['https://shop.example/products/real-tote']);
 });
 
+test('does not visit Indian candidates for an EU search', async () => {
+  const indianUrl = 'https://indianbrand.in/products/cotton-tote';
+  const euUrl = 'https://eushop.de/products/cotton-tote';
+  let fetchedUrls = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.search.tinyfish.ai') {
+      return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? [] : [
+        { url: indianUrl, title: 'Cotton tote Rs. 1,999 India' },
+        { url: euUrl, title: 'Cotton tote EUR 29.00' },
+      ] });
+    }
+    fetchedUrls = JSON.parse(init.body).urls;
+    return Response.json({ results: [{ url: euUrl, text: '<h1>Cotton tote</h1><p>€29.00</p>' }], errors: [] });
+  });
+  const response = await api.POST(request('EU'));
+  assert.equal(response.status, 200);
+  assert.deepEqual(fetchedUrls, [euUrl]);
+});
+
 test('rejects a listing page containing multiple structured products', async () => {
   const listingUrl = 'https://shop.example/products/tote-collection';
   const listing = {
