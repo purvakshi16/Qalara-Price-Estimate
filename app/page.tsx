@@ -249,7 +249,7 @@ export default function Home() {
             <div className="panel-body">
               <form className="form-grid" onSubmit={runSearch}>
                 <div className="field">
-                  <label htmlFor="productName">Product name</label>
+                  <label htmlFor="productName">Product name <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <input
                     id="productName"
                     value={form.productName}
@@ -294,14 +294,14 @@ export default function Home() {
                       <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionHeight}
                         onChange={(event) => setForm({ ...form, dimensionHeight: event.target.value })} placeholder="10" />
                     </label>
-                    <label>
-                      <span>Unit</span>
-                      <select value={form.dimensionUnit} onChange={(event) => setForm({ ...form, dimensionUnit: event.target.value })}>
-                        <option value="cm">cm</option>
-                        <option value="in">in</option>
-                      </select>
-                    </label>
                   </div>
+                  <label className="dimension-unit">
+                    <span>Unit</span>
+                    <select value={form.dimensionUnit} onChange={(event) => setForm({ ...form, dimensionUnit: event.target.value })}>
+                      <option value="cm">cm</option>
+                      <option value="in">in</option>
+                    </select>
+                  </label>
                   <p className="field-help">Optional. Enter the finished product dimensions.</p>
                 </fieldset>
                 <div className="field">
