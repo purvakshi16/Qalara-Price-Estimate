@@ -12,7 +12,6 @@ type ProductResult = {
   marketplace: string;
   productUrl: string;
   imageUrl: string;
-  similarity: number;
   notes: string;
   minPrice: number;
   maxPrice: number;
@@ -22,7 +21,6 @@ type ProductResult = {
 type SearchResponse = {
   currency: string;
   displayProducts: ProductResult[];
-  imageSearchRequested: boolean;
   searched: {
     visualMatchesReturned: number;
     pagesAccessed: number;
@@ -42,7 +40,7 @@ const initialForm = {
   region: "US" as Region,
 };
 
-const SEARCH_TIMEOUT_MS = 60_000;
+const SEARCH_TIMEOUT_MS = 120_000;
 
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("en", {
@@ -71,7 +69,6 @@ export default function Home() {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [searchProgress, setSearchProgress] = useState("");
   const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched"> | null>(null);
-  const [reviews, setReviews] = useState<Record<string, "relevant" | "not-relevant">>({});
 
   const estimate = useMemo(() => {
     const products = response?.displayProducts ?? [];
@@ -84,12 +81,6 @@ export default function Home() {
     }
     return { currency, min: Math.min(...minimums), max: Math.max(...maximums) };
   }, [form.region, response]);
-
-  const reviewSummary = useMemo(() => {
-    const values = Object.values(reviews);
-    const relevant = values.filter((value) => value === "relevant").length;
-    return { reviewed: values.length, relevant, accuracy: values.length ? Math.round((relevant / values.length) * 100) : 0 };
-  }, [reviews]);
 
   async function handleImageChange(fileList: FileList | null) {
     const file = fileList?.[0];
@@ -116,7 +107,6 @@ export default function Home() {
     setError("");
     setLoading(true);
     setResponse(null);
-    setReviews({});
     setLastDiagnostics(null);
     setSearchProgress("Finding product pages and reading retail prices...");
 
@@ -329,13 +319,6 @@ export default function Home() {
 
                   <SearchDiagnostics diagnostics={lastDiagnostics} />
 
-                  {response.imageSearchRequested ? (
-                    <div className="review-summary" aria-live="polite">
-                      <strong>Visual-match accuracy: {reviewSummary.reviewed ? `${reviewSummary.accuracy}%` : "Not reviewed"}</strong>
-                      <span>{reviewSummary.relevant} relevant out of {reviewSummary.reviewed} reviewed results</span>
-                    </div>
-                  ) : null}
-
                   <div className="results-header">
                     <div>
                       <h2 className="panel-title">Candidate Sources</h2>
@@ -352,7 +335,6 @@ export default function Home() {
                           <th>Marketplace</th>
                           <th>Seller</th>
                           <th>Price</th>
-                          {response.imageSearchRequested ? <th>Review</th> : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -377,16 +359,6 @@ export default function Home() {
                               <td>{product.marketplace}</td>
                               <td>{product.seller}</td>
                               <td>{formatProductPrice(product)}</td>
-                              {response.imageSearchRequested ? (
-                                <td>
-                                  <div className="relevance-control" aria-label={`Review ${product.title}`}>
-                                    <button type="button" className={reviews[product.productUrl] === "relevant" ? "active" : ""}
-                                      onClick={() => setReviews((current) => ({ ...current, [product.productUrl]: "relevant" }))}>Relevant</button>
-                                    <button type="button" className={reviews[product.productUrl] === "not-relevant" ? "active" : ""}
-                                      onClick={() => setReviews((current) => ({ ...current, [product.productUrl]: "not-relevant" }))}>Not relevant</button>
-                                  </div>
-                                </td>
-                              ) : null}
                             </tr>
                         ))}
                       </tbody>

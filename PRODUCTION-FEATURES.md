@@ -33,7 +33,7 @@ This document records the functionality intended to be active in the current pro
 
 - **Price range:** Lowest and highest retail prices across the usable PDPs returned by the search.
 - **Search diagnostics:** Shows only visual matches returned, pages successfully accessed and valid product pages found.
-- Each displayed image-search result has session-only Relevant / Not relevant review controls and a live accuracy percentage; this feedback is not stored.
+- The search has a two-minute request ceiling and an internal 110-second processing budget. Results return immediately when six valid PDPs are found or candidates are exhausted.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.
 
@@ -63,6 +63,6 @@ The Source item title is the direct link to the matched retail product page; the
 
 ## Currently Paused
 
-- Promotion of image search to the primary required field; this remains experimental until reviewed accuracy reaches at least 60%.
+- Promotion of image search to the primary required field; this remains experimental while visual relevance is being improved.
 - Wholesale seller research, MOQ and wholesale-price extraction.
 - Persistent storage of searches or results.

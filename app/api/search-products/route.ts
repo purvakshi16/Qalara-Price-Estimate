@@ -9,7 +9,7 @@ type SearchRequest = { productName: string; description?: string; material?: str
 type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
-  productUrl: string; imageUrl: string; similarity: number; notes: string;
+  productUrl: string; imageUrl: string; notes: string;
   minPrice: number; maxPrice: number; pageType: "PDP";
 };
 const regions = {
@@ -19,9 +19,9 @@ const regions = {
 };
 const TARGET_VALID_PDPS = 6;
 const FETCH_BATCH_SIZE = 6;
-const SEARCH_BUDGET_MS = 50_000;
+const SEARCH_BUDGET_MS = 110_000;
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   let cleanupReceipt = "";
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     };
     if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", searched }, { status: 422 });
     return NextResponse.json({
-      currency: config.currency, displayProducts: products, imageSearchRequested: Boolean(input.imageDataUrl), searched,
+      currency: config.currency, displayProducts: products, searched,
     });
   } catch (error) {
     const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
@@ -226,7 +226,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     }
     if (!imageUrl) imageUrl = text(candidate.sourceImage);
   }
-  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, similarity: 0, pageType: "PDP", notes: evidence };
+  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, pageType: "PDP", notes: evidence };
 }
 
 function amount(value: unknown): number | null {

@@ -202,7 +202,6 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
   const data = await response.json();
   assert.equal(data.displayProducts[0].productUrl, visualUrl);
   assert.equal(data.displayProducts[0].imageUrl, 'https://visual-shop.example/tote.jpg');
-  assert.equal(data.imageSearchRequested, true);
   assert.equal(data.searched.visualMatchesReturned, 1);
   assert.equal(deletedReceipt, 'cleanup-receipt');
 });
