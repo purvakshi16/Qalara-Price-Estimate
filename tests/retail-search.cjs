@@ -73,6 +73,42 @@ test('parses German decimal comma and localizes search', async () => {
   assert.equal(data.currency, 'EUR');
 });
 
+test('adds structured dimensions to both text discovery queries', async () => {
+  const queries = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.search.tinyfish.ai') {
+      queries.push(parsed.searchParams.get('query'));
+      return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? [] : [{ url, title: 'Cotton tote 30 x 20 x 10 cm' }] });
+    }
+    return Response.json({ results: [{ url, text: '<h1>Cotton tote 30 x 20 x 10 cm</h1><p>$19.99</p>' }], errors: [] });
+  });
+  const response = await api.POST(request('US', { dimensions: { length: '30', width: '20', height: '10', unit: 'cm' } }));
+  assert.equal(response.status, 200);
+  assert.equal(queries.length, 2);
+  assert.ok(queries.every((query) => query.includes('30 x 20 x 10 cm')));
+});
+
+test('ranks stronger attribute matches before unrelated candidates', async () => {
+  const bestUrl = 'https://best.example/products/cotton-tote-30x20';
+  let fetchedUrls = [];
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.search.tinyfish.ai') {
+      return Response.json({ results: parsed.searchParams.get('query').includes('site:amazon') ? [] : [
+        { url: 'https://other.example/products/leather-bag', title: 'Leather shoulder bag' },
+        { url: bestUrl, title: 'Cotton tote bag 30 x 20 x 10 cm' },
+      ] });
+    }
+    fetchedUrls = JSON.parse(init.body).urls;
+    return Response.json({ results: fetchedUrls.map((pageUrl) => ({ url: pageUrl, text: `<h1>${pageUrl === bestUrl ? 'Cotton tote bag 30 x 20 x 10 cm' : 'Leather shoulder bag'}</h1><p>$20.00</p>` })), errors: [] });
+  });
+  const response = await api.POST(request('US', { material: 'cotton', dimensions: { length: '30', width: '20', height: '10', unit: 'cm' } }));
+  assert.equal(response.status, 200);
+  assert.equal(fetchedUrls[0], bestUrl);
+  assert.equal((await response.json()).displayProducts[0].productUrl, bestUrl);
+});
+
 test('extracts Shopify Open Graph price metadata', async () => {
   const html = '<meta property="og:price:currency" content="EUR"><meta property="og:price:amount" content="6,50"><meta property="og:image" content="/napkin.jpg"><h1>Cotton napkins</h1>';
   const { api } = provider(html, { location: 'DE' });

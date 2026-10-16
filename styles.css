@@ -166,6 +166,43 @@ a {
   line-height: 1.35;
 }
 
+.dimension-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.dimension-field legend {
+  padding: 0;
+  color: #2f3b37;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dimension-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dimension-grid label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .dimension-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .image-preview-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

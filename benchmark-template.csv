@@ -1,0 +1,2 @@
+test_id,reference_image,product_name,description,material,length,width,height,unit,region,expected_category,result_rank,result_url,relevant_pdp,price_correct,region_correct,observed_price,notes,app_version
+T001,benchmarks/T001.jpg,,,,,,,cm,US,,1,,,,,,,baseline

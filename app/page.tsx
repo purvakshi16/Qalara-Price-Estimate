@@ -37,6 +37,10 @@ const initialForm = {
   productName: "",
   description: "",
   material: "",
+  dimensionLength: "",
+  dimensionWidth: "",
+  dimensionHeight: "",
+  dimensionUnit: "cm",
   region: "US" as Region,
 };
 
@@ -119,7 +123,16 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          ...form,
+          productName: form.productName,
+          description: form.description,
+          material: form.material,
+          region: form.region,
+          dimensions: {
+            length: form.dimensionLength,
+            width: form.dimensionWidth,
+            height: form.dimensionHeight,
+            unit: form.dimensionUnit,
+          },
           imageDataUrl: uploadedImage?.dataUrl,
         }),
       });
@@ -263,6 +276,34 @@ export default function Home() {
                     placeholder="Cotton, jute, canvas"
                   />
                 </div>
+                <fieldset className="field dimension-field">
+                  <legend>Product dimensions</legend>
+                  <div className="dimension-grid">
+                    <label>
+                      <span>Length</span>
+                      <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionLength}
+                        onChange={(event) => setForm({ ...form, dimensionLength: event.target.value })} placeholder="30" />
+                    </label>
+                    <label>
+                      <span>Width</span>
+                      <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionWidth}
+                        onChange={(event) => setForm({ ...form, dimensionWidth: event.target.value })} placeholder="20" />
+                    </label>
+                    <label>
+                      <span>Height</span>
+                      <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionHeight}
+                        onChange={(event) => setForm({ ...form, dimensionHeight: event.target.value })} placeholder="10" />
+                    </label>
+                    <label>
+                      <span>Unit</span>
+                      <select value={form.dimensionUnit} onChange={(event) => setForm({ ...form, dimensionUnit: event.target.value })}>
+                        <option value="cm">cm</option>
+                        <option value="in">in</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p className="field-help">Optional. Enter the finished product dimensions.</p>
+                </fieldset>
                 <div className="field">
                   <label htmlFor="productImages">Upload image</label>
                   <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => handleImageChange(event.target.files)} />

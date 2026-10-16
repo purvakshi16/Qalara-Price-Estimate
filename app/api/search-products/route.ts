@@ -5,12 +5,14 @@ import { load } from "cheerio";
 import { deleteReference, uploadReference } from "../../../lib/temporary-images";
 
 type Region = "UK" | "US" | "EU";
-type SearchRequest = { productName: string; description?: string; material?: string; region: Region; stage?: string; imageDataUrl?: string };
+type Dimensions = { length?: string; width?: string; height?: string; unit?: "cm" | "in" };
+type SearchRequest = { productName: string; description?: string; material?: string; dimensions?: Dimensions; region: Region; stage?: string; imageDataUrl?: string };
 type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
   productUrl: string; imageUrl: string; notes: string;
   minPrice: number; maxPrice: number; pageType: "PDP";
+  matchScore: number;
 };
 const regions = {
   US: { currency: "USD", location: "US", language: "en", market: "United States", marketplaceDomains: ["amazon.com", "etsy.com", "ebay.com", "alibaba.com"] },
@@ -34,7 +36,8 @@ export async function POST(request: Request) {
     const apiKey = getApiKey();
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
     const signal = AbortSignal.timeout(SEARCH_BUDGET_MS);
-    const query = [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
+    const dimensionQuery = dimensionText(input.dimensions);
+    const query = [input.productName.trim(), input.material?.trim(), dimensionQuery, input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
     let visualSearch: RecordValue = {};
     if (input.imageDataUrl) {
       const searchApiKey = getSearchApiKey();
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
       const uploaded = await uploadReference(input.imageDataUrl);
       cleanupReceipt = uploaded.receipt;
       const params = new URLSearchParams({ engine: "google_lens", search_type: "visual_matches", url: uploaded.url,
-        q: [input.productName.trim(), input.material?.trim(), input.description?.trim().slice(0, 100), config.market, config.currency].filter(Boolean).join(" "),
+        q: [input.productName.trim(), input.material?.trim(), dimensionQuery, input.description?.trim().slice(0, 100), config.market, config.currency].filter(Boolean).join(" "),
         country: config.location, hl: config.language,
       });
       visualSearch = await searchApiJson(`https://www.searchapi.io/api/v1/search?${params}`, searchApiKey, signal);
@@ -63,12 +66,14 @@ export async function POST(request: Request) {
       .filter((row) => isDirectProductUrl(text(row.url)) && !isNonPhysicalCandidate(text(asRecord(row).title))
         && isRegionCandidate(row, input.region, config.currency));
     const generalCandidates = rankedCandidates(generalSearch)
-      .filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency))
-      ;
+      .filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency));
     const marketplaceCandidates = rankedCandidates(marketplaceSearch)
-      .filter((row) => isMarketplaceProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency))
-      ;
-    const unique = interleaveCandidates([visualCandidates, generalCandidates, marketplaceCandidates]);
+      .filter((row) => isMarketplaceProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency));
+    const unique = interleaveCandidates([
+      rankByAttributes(visualCandidates, input),
+      rankByAttributes(generalCandidates, input),
+      rankByAttributes(marketplaceCandidates, input),
+    ]);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
     const products: ProductResult[] = [];
     let pagesAccessed = 0;
@@ -91,7 +96,7 @@ export async function POST(request: Request) {
       for (const page of fetchedPages) {
         const candidate = batch.find((row) => text(row.url) === text(page.url));
         if (!candidate) continue;
-        const product = extractProduct(page, candidate, config.currency);
+        const product = extractProduct(page, candidate, config.currency, input);
         if (product) products.push(product);
         if (products.length === TARGET_VALID_PDPS) break;
       }
@@ -102,8 +107,11 @@ export async function POST(request: Request) {
       validPagesFound: products.length,
     };
     if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", searched }, { status: 422 });
+    const displayProducts = products
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .map(({ matchScore: _matchScore, ...product }) => product);
     return NextResponse.json({
-      currency: config.currency, displayProducts: products, searched,
+      currency: config.currency, displayProducts, searched,
     });
   } catch (error) {
     const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
@@ -160,7 +168,7 @@ async function providerJson(url: string, key: string, signal: AbortSignal, body?
   catch { throw new Error("TinyFish returned an unreadable response. No paid fallback was used."); }
 }
 
-function extractProduct(page: RecordValue, candidate: RecordValue, currency: string): ProductResult | null {
+function extractProduct(page: RecordValue, candidate: RecordValue, currency: string, input: SearchRequest): ProductResult | null {
   const url = text(page.final_url) || text(page.url);
   if (candidate.visualMatch === true ? !isRetailCandidateUrl(url) : !isDirectProductUrl(url)) return null;
   const $ = load(text(page.text));
@@ -226,7 +234,8 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     }
     if (!imageUrl) imageUrl = text(candidate.sourceImage);
   }
-  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, pageType: "PDP", notes: evidence };
+  const matchScore = candidateAttributeScore({ ...candidate, title, description: content }, input);
+  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, pageType: "PDP", notes: evidence, matchScore };
 }
 
 function amount(value: unknown): number | null {
@@ -307,6 +316,41 @@ function productIdentity(product: RecordValue, pageUrl: string) {
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
 function asRecord(value: unknown): RecordValue { return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {}; }
 function records(value: unknown): RecordValue[] { return Array.isArray(value) ? value.filter((item) => item && typeof item === "object" && !Array.isArray(item)) : []; }
+function dimensionText(dimensions?: Dimensions) {
+  if (!dimensions) return "";
+  const unit = dimensions.unit === "in" ? "in" : "cm";
+  const values = [dimensions.length, dimensions.width, dimensions.height].map((value) => text(value)).filter(Boolean);
+  return values.length ? `${values.join(" x ")} ${unit}` : "";
+}
+function rankByAttributes(rows: RecordValue[], input: SearchRequest) {
+  return rows.map((row) => ({ ...row, attributeScore: candidateAttributeScore(row, input) }))
+    .sort((a, b) => Number(b.attributeScore) - Number(a.attributeScore));
+}
+function candidateAttributeScore(row: RecordValue, input: SearchRequest) {
+  const haystack = [row.title, row.snippet, row.description, row.source, row.price]
+    .map((entry) => typeof entry === "string" ? entry : text(asRecord(entry).value)).join(" ").toLowerCase();
+  const nameTokens = meaningfulTokens(input.productName);
+  const descriptionTokens = meaningfulTokens(input.description ?? "");
+  let score = tokenCoverage(nameTokens, haystack) * 40 + tokenCoverage(descriptionTokens, haystack) * 15;
+  if (input.productName.trim() && haystack.includes(input.productName.trim().toLowerCase())) score += 10;
+  const materials = (input.material ?? "").toLowerCase().split(/[,/|]+/).map((value) => value.trim()).filter(Boolean);
+  if (materials.length && materials.some((material) => haystack.includes(material))) score += 15;
+  const dimensions = [input.dimensions?.length, input.dimensions?.width, input.dimensions?.height].map((value) => text(value)).filter(Boolean);
+  if (dimensions.length) score += dimensions.filter((value) => new RegExp(`(?:^|\\D)${escapeRegExp(value)}(?:\\D|$)`).test(haystack)).length / dimensions.length * 10;
+  if (row.visualMatch === true) {
+    const position = Number(row.position);
+    score += Number.isFinite(position) && position > 0 ? 20 / Math.sqrt(position) : 5;
+  }
+  return score;
+}
+function meaningfulTokens(value: string) {
+  const ignored = new Set(["and", "the", "for", "with", "from", "this", "that", "product", "item"]);
+  return [...new Set(value.toLowerCase().match(/[a-z0-9]+/g) ?? [])].filter((token) => token.length > 2 && !ignored.has(token));
+}
+function tokenCoverage(tokens: string[], haystack: string) {
+  return tokens.length ? tokens.filter((token) => haystack.includes(token)).length / tokens.length : 0;
+}
+function escapeRegExp(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function rankedCandidates(search: RecordValue) {
   return records(search.results).filter((row) => isRetailCandidateUrl(text(row.url)))
     .sort((a, b) => Number(hasProductPath(text(b.url))) - Number(hasProductPath(text(a.url))));

@@ -1,6 +1,6 @@
 # Market Price Estimator: Production Features
 
-Last updated: 13 October 2026
+Last updated: 16 October 2026
 
 This document records the functionality intended to be active in the current production application. It should be updated alongside every production-facing feature change.
 
@@ -9,14 +9,15 @@ This document records the functionality intended to be active in the current pro
 - **Product name:** Required. Supplies the main retail search phrase.
 - **Description:** Optional. Adds product characteristics such as finish, shape, use case and pack size.
 - **Material:** Optional. Narrows the search to the requested material.
+- **Product dimensions:** Optional structured length, width and height fields with centimetre or inch units. Enter only known finished-product dimensions.
 - **Image:** Accepts one JPEG, PNG or WebP image up to 2 MB. When supplied, an experimental Google Lens visual-match search runs before text discovery and its candidates receive first priority.
 - The image is temporarily uploaded to public Vercel Blob storage so the visual-search provider can read it, then deleted in the API route's `finally` cleanup whether the search succeeds or fails.
-- Product name, description and optional material are sent alongside the image to improve visual-match relevance. Colour differences are allowed; material only influences the query when entered.
+- Product name, description, optional material and optional dimensions are sent alongside the image to improve visual-match relevance. Colour differences are allowed; material and dimensions only influence the search when entered.
 - **Region and currency:** US - USD is the default. UK - GBP and EU - EUR (Germany) are also available.
 
 ## Retail Search
 
-- Uses the product name, description, material and selected region to search only for direct retail product-detail pages (PDPs).
+- Uses a two-stage search and validation flow. Stage one discovers and ranks direct PDP candidates using image-search position plus product name, description, material and dimensions. Stage two fetches those candidates, admits only accessible PDPs with defensible region-currency prices, and reranks the valid products using the content found on each PDP.
 - Uses free search and page-fetch operations only. Paid browser-agent fallback is disabled.
 - Runs one general retail search and one region-aware marketplace search.
 - Applies no fixed candidate or marketplace-page cap. It interleaves visual, general retail and marketplace PDP candidates, fetches them in operational batches, and stops when six valid PDPs are found, all returned candidates are exhausted or the Vercel-safe execution deadline is reached.
@@ -28,6 +29,7 @@ This document records the functionality intended to be active in the current pro
 - Rejects PLPs, homepages, seller profiles, search pages, categories, collections and filtered result pages.
 - Returns the specific product-detail-page link rather than a general search-results link.
 - Omits inaccessible pages and pages without an unambiguous price.
+- The current visual signal is the external visual-search result position. A true numerical CLIP/SigLIP similarity score is not yet active and must not be interpreted as trained model output.
 
 ## Estimate Summary
 
