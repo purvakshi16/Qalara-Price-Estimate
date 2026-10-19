@@ -338,7 +338,9 @@ export default function Home() {
                   </p>
                 ) : null}
                 <button className="btn" disabled={loading || !form.productName.trim() || !uploadedImage} type="submit">
-                  {loading ? "Searching live products..." : "Find Similar Items"}
+                  {loading ? (
+                    <><span className="loading-spinner button-spinner" aria-hidden="true" />Searching products...</>
+                  ) : "Find Similar Items"}
                 </button>
                 {loading ? <p className="source-meta" role="status">{searchProgress}</p> : null}
               </form>
@@ -350,7 +352,15 @@ export default function Home() {
               <h2 className="panel-title">Search Results</h2>
             </div>
             <div className="panel-body">
-              {response ? (
+              {loading ? (
+                <div className="search-loading" role="status" aria-live="polite">
+                  <div>
+                    <span className="loading-spinner results-spinner" aria-hidden="true" />
+                    <p className="loading-title">Searching products...</p>
+                    <p className="source-meta">{searchProgress}</p>
+                  </div>
+                </div>
+              ) : response ? (
                 <>
                   <div className="estimate-grid one">
                     <div className="metric">
