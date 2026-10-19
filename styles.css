@@ -181,30 +181,20 @@ a {
 
 .dimension-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
-.dimension-grid label,
-.dimension-unit {
+.dimension-grid label {
   display: grid;
   gap: 5px;
   min-width: 0;
 }
 
-.dimension-grid label span,
-.dimension-unit span {
+.dimension-grid label span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
-}
-
-.dimension-unit {
-  margin-top: 8px;
-}
-
-.dimension-unit select {
-  width: 100%;
 }
 
 .required-mark {

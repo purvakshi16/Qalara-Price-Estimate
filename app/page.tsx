@@ -280,28 +280,28 @@ export default function Home() {
                   <legend>Product dimensions</legend>
                   <div className="dimension-grid">
                     <label>
-                      <span>Length</span>
                       <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionLength}
                         onChange={(event) => setForm({ ...form, dimensionLength: event.target.value })} placeholder="30" />
+                      <span>Length</span>
                     </label>
                     <label>
-                      <span>Width</span>
                       <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionWidth}
                         onChange={(event) => setForm({ ...form, dimensionWidth: event.target.value })} placeholder="20" />
+                      <span>Width</span>
                     </label>
                     <label>
-                      <span>Height</span>
                       <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionHeight}
                         onChange={(event) => setForm({ ...form, dimensionHeight: event.target.value })} placeholder="10" />
+                      <span>Height</span>
+                    </label>
+                    <label>
+                      <select value={form.dimensionUnit} onChange={(event) => setForm({ ...form, dimensionUnit: event.target.value })}>
+                        <option value="cm">cm</option>
+                        <option value="in">in</option>
+                      </select>
+                      <span>Unit</span>
                     </label>
                   </div>
-                  <label className="dimension-unit">
-                    <span>Unit</span>
-                    <select value={form.dimensionUnit} onChange={(event) => setForm({ ...form, dimensionUnit: event.target.value })}>
-                      <option value="cm">cm</option>
-                      <option value="in">in</option>
-                    </select>
-                  </label>
                   <p className="field-help">Optional. Enter the finished product dimensions.</p>
                 </fieldset>
                 <div className="field">
