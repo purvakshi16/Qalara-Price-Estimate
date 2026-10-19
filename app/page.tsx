@@ -328,7 +328,7 @@ export default function Home() {
                   <select id="region" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value as Region })}>
                     <option value="AU">Australia - AUD</option>
                     <option value="EU">Europe - EUR</option>
-                    <option value="US">United States of America - USD</option>
+                    <option value="US">United States - USD</option>
                     <option value="UK">United Kingdom - GBP</option>
                   </select>
                 </div>
