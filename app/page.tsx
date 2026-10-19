@@ -368,14 +368,21 @@ export default function Home() {
                   </div>
 
                   <div className="table-wrap">
-                    <table>
+                    <table className="results-table">
+                      <colgroup>
+                        <col className="image-column" />
+                        <col className="source-column" />
+                        <col className="price-column" />
+                        <col className="marketplace-column" />
+                        <col className="seller-column" />
+                      </colgroup>
                       <thead>
                         <tr>
                           <th>Image</th>
                           <th>Source item</th>
+                          <th>PDP price</th>
                           <th>Marketplace</th>
                           <th>Seller</th>
-                          <th>Price</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -397,9 +404,9 @@ export default function Home() {
                                   </div>
                                 </div>
                               </td>
+                              <td className="price-cell">{formatProductPrice(product)}</td>
                               <td>{product.marketplace}</td>
                               <td>{product.seller}</td>
-                              <td>{formatProductPrice(product)}</td>
                             </tr>
                         ))}
                       </tbody>

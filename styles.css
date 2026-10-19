@@ -417,8 +417,33 @@ a {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 860px;
+  min-width: 720px;
   background: #ffffff;
+}
+
+.results-table {
+  table-layout: fixed;
+}
+
+.results-table .image-column {
+  width: 82px;
+}
+
+.results-table .price-column {
+  width: 105px;
+}
+
+.results-table .marketplace-column {
+  width: 116px;
+}
+
+.results-table .seller-column {
+  width: 90px;
+}
+
+.results-table .price-cell {
+  white-space: nowrap;
+  font-weight: 700;
 }
 
 th,
