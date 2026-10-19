@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { route } = require('./route-loader.cjs');
 const url = 'https://shop.example/products/cotton-tote';
-const request = (region = 'US', extra = {}) => new Request('https://app.example/api/search-products', { method: 'POST', body: JSON.stringify({ productName: 'Cotton tote', region, ...extra }) });
+const request = (region = 'US', extra = {}) => new Request('https://app.example/api/search-products', { method: 'POST', body: JSON.stringify({ productName: 'Cotton tote', region, imageDataUrl: 'data:image/jpeg;base64,YQ==', ...extra }) });
 
 function provider(html, options = {}) {
   const calls = [];
@@ -22,6 +22,16 @@ function provider(html, options = {}) {
   };
   return { api: route(fetch), calls };
 }
+
+test('requires a product image', async () => {
+  const { api, calls } = provider('<h1>Cotton tote</h1><p>$19.99</p>');
+  const response = await api.POST(new Request('https://app.example/api/search-products', {
+    method: 'POST', body: JSON.stringify({ productName: 'Cotton tote', region: 'US' }),
+  }));
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /image is required/i);
+  assert.equal(calls.length, 0);
+});
 
 test('extracts a single requested-currency price from primary PDP text', async () => {
   const { api, calls } = provider('<h1>Cotton tote</h1><p>$19.99</p>');
@@ -292,6 +302,7 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
     if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
     return Response.json({ results: [{ url: visualUrl, text: '<h1>Visual cotton tote</h1><p>$24.00 USD</p>' }], errors: [] });
   }, 'test-key', {
+    passthroughSearchApi: true,
     uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'cleanup-receipt' }),
     deleteReference: async (receipt) => { deletedReceipt = receipt; },
   });
@@ -319,6 +330,7 @@ test('does not fetch visual listing pages or pattern candidates', async () => {
     fetchedUrls = JSON.parse(init.body).urls;
     return Response.json({ results: [{ url: fetchedUrls[0], text: '<h1>Handmade tote bag</h1><p>$38.00</p>' }], errors: [] });
   }, 'test-key', {
+    passthroughSearchApi: true,
     uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' }),
     deleteReference: async () => undefined,
   });

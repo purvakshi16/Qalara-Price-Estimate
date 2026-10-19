@@ -7,8 +7,14 @@ function route(fetch, key = 'test-key', services = {}) {
   const source = fs.readFileSync('app/api/search-products/route.ts', 'utf8');
   const compiled = stripTypeScriptTypes(source).replace(/^import .*;$/gm, '').replace(/^export /gm, '') + '\nexports.POST = POST; exports.GET = GET;';
   const exports = {};
+  const wrappedFetch = async (endpoint, init) => {
+    if (new URL(endpoint).hostname === 'www.searchapi.io' && !services.passthroughSearchApi) {
+      return Response.json({ visual_matches: [] });
+    }
+    return fetch(endpoint, init);
+  };
   vm.runInNewContext(compiled, {
-    exports, fetch, Request, Response, URL, URLSearchParams, AbortSignal, console, load,
+    exports, fetch: wrappedFetch, Request, Response, URL, URLSearchParams, AbortSignal, console, load,
     NextResponse: Response, existsSync: fs.existsSync, readFileSync: fs.readFileSync,
     join: require('node:path').join, process: { env: { TINYFISH_API_KEY: key, SEARCHAPI_API_KEY: 'searchapi-test-key' } },
     uploadReference: services.uploadReference ?? (async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' })),

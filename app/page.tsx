@@ -73,6 +73,7 @@ export default function Home() {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [searchProgress, setSearchProgress] = useState("");
   const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched"> | null>(null);
+  const [searchStarted, setSearchStarted] = useState(false);
 
   const estimate = useMemo(() => {
     const products = response?.displayProducts ?? [];
@@ -108,7 +109,12 @@ export default function Home() {
 
   async function runSearch(event: FormEvent) {
     event.preventDefault();
+    if (!uploadedImage) {
+      setError("Upload a product image before searching.");
+      return;
+    }
     setError("");
+    setSearchStarted(true);
     setLoading(true);
     setResponse(null);
     setLastDiagnostics(null);
@@ -240,7 +246,7 @@ export default function Home() {
       </header>
 
       <div className="shell">
-        <div className="workspace">
+        <div className={`workspace${searchStarted ? "" : " entry-only"}`}>
           <section className="panel input-panel">
             <div className="panel-header">
               <h2 className="panel-title">Product Details</h2>
@@ -304,9 +310,9 @@ export default function Home() {
                   <p className="field-help">Optional. Enter the finished product dimensions.</p>
                 </fieldset>
                 <div className="field">
-                  <label htmlFor="productImages">Upload image</label>
-                  <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => handleImageChange(event.target.files)} />
-                  <p className="field-help">Optional experimental visual search. The temporary image is deleted after the search.</p>
+                  <label htmlFor="productImages">Upload image <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
+                  <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => handleImageChange(event.target.files)} />
+                  <p className="field-help">Required for visual matching. The temporary image is deleted after the search.</p>
                   <div className="image-preview-grid" aria-live="polite">
                     {imagePreview ? (
                       <>
@@ -333,7 +339,7 @@ export default function Home() {
                     {error}
                   </p>
                 ) : null}
-                <button className="btn" disabled={loading || !form.productName.trim()} type="submit">
+                <button className="btn" disabled={loading || !form.productName.trim() || !uploadedImage} type="submit">
                   {loading ? "Searching live products..." : "Find Similar Items"}
                 </button>
                 {loading ? <p className="source-meta" role="status">{searchProgress}</p> : null}
@@ -341,7 +347,7 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="panel">
+          {searchStarted ? <section className="panel">
             <div className="panel-header">
               <h2 className="panel-title">Search Results</h2>
             </div>
@@ -424,7 +430,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-          </section>
+          </section> : null}
         </div>
       </div>
     </main>

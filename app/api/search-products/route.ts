@@ -33,6 +33,9 @@ export async function POST(request: Request) {
     const input = await request.json() as SearchRequest;
     if (input.stage === "wholesale") return NextResponse.json({ error: "Wholesale lookup is paused." }, { status: 400 });
     if (typeof input.productName !== "string" || !input.productName.trim()) return NextResponse.json({ error: "Product name is required." }, { status: 400 });
+    if (typeof input.imageDataUrl !== "string" || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(input.imageDataUrl)) {
+      return NextResponse.json({ error: "A JPEG, PNG or WebP product image is required." }, { status: 400 });
+    }
     const config = regions[input.region] ?? regions.US;
     const apiKey = getApiKey();
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");

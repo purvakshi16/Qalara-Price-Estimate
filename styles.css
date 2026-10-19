@@ -104,6 +104,11 @@ a {
   align-items: start;
 }
 
+.workspace.entry-only {
+  grid-template-columns: minmax(0, 520px);
+  justify-content: center;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -150,6 +155,12 @@ a {
   color: var(--foreground);
   padding: 11px 12px;
   outline: none;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: #a5a79f;
+  opacity: 1;
 }
 
 .field textarea {
