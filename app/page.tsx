@@ -307,12 +307,10 @@ export default function Home() {
                       <span>Unit</span>
                     </label>
                   </div>
-                  <p className="field-help">Optional. Enter the finished product dimensions.</p>
                 </fieldset>
                 <div className="field">
                   <label htmlFor="productImages">Upload image <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => handleImageChange(event.target.files)} />
-                  <p className="field-help">Required for visual matching. The temporary image is deleted after the search.</p>
                   <div className="image-preview-grid" aria-live="polite">
                     {imagePreview ? (
                       <>
