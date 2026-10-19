@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 
-type Region = "UK" | "US" | "EU";
+type Region = "UK" | "US" | "EU" | "AU";
 
 type ProductResult = {
   title: string;
@@ -78,7 +78,7 @@ export default function Home() {
     const products = response?.displayProducts ?? [];
     const minimums = products.map((product) => product.minPrice ?? product.price);
     const maximums = products.map((product) => product.maxPrice ?? product.price);
-    const currency = response?.currency ?? (form.region === "UK" ? "GBP" : form.region === "US" ? "USD" : "EUR");
+    const currency = response?.currency ?? ({ US: "USD", UK: "GBP", EU: "EUR", AU: "AUD" } as const)[form.region];
 
     if (!minimums.length) {
       return { currency, min: 0, max: 0 };
@@ -208,7 +208,7 @@ export default function Home() {
             <img className="brand-mark" src="/qalara-icon.ico" alt="Qalara" />
             <div>
               <h1 className="brand-title">Market Price Estimator</h1>
-              <p className="brand-subtitle">UK, US and EU selling price estimates from comparable sources</p>
+              <p className="brand-subtitle">US, UK, EU and Australian selling price estimates from comparable sources</p>
             </div>
           </div>
           <div className="download-menu">
@@ -325,6 +325,7 @@ export default function Home() {
                     <option value="US">US - USD</option>
                     <option value="UK">UK - GBP</option>
                     <option value="EU">EU - EUR / Germany</option>
+                    <option value="AU">Australia - AUD</option>
                   </select>
                 </div>
                 {error ? (

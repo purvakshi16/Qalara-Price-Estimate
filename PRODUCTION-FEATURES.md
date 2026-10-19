@@ -13,7 +13,7 @@ This document records the functionality intended to be active in the current pro
 - **Image:** Accepts one JPEG, PNG or WebP image up to 2 MB. When supplied, an experimental Google Lens visual-match search runs before text discovery and its candidates receive first priority.
 - The image is temporarily uploaded to public Vercel Blob storage so the visual-search provider can read it, then deleted in the API route's `finally` cleanup whether the search succeeds or fails.
 - Product name, description, optional material and optional dimensions are sent alongside the image to improve visual-match relevance. Colour differences are allowed; material and dimensions only influence the search when entered.
-- **Region and currency:** US - USD is the default. UK - GBP and EU - EUR (Germany) are also available.
+- **Region and currency:** US - USD is the default. UK - GBP, EU - EUR (Germany) and Australia - AUD are also available.
 
 ## Retail Search
 
@@ -23,7 +23,7 @@ This document records the functionality intended to be active in the current pro
 - Applies no fixed candidate or marketplace-page cap. It interleaves visual, general retail and marketplace PDP candidates, fetches them in operational batches, and stops when six valid PDPs are found, all returned candidates are exhausted or the Vercel-safe execution deadline is reached.
 - Marketplace discovery targets Amazon, Etsy, eBay and Alibaba using the appropriate Amazon/eBay domain for the selected region.
 - Marketplace candidates must be direct product-detail URLs. Marketplace search, category, filter and collection pages are excluded.
-- Candidate domains, country signals and currencies are checked against the selected US, UK or EU market before a page is fetched.
+- Candidate domains, country signals and currencies are checked against the selected US, UK, EU or Australian market before a page is fetched.
 - Extracts retail price evidence in layers: structured `Product` offers, explicit product-price metadata (including Shopify Open Graph fields), recognized primary-price elements, and finally unambiguous currency-marked price text near the PDP heading. Crossed-out, shipping, related-product and conflicting prices are excluded.
 - Skips pages when the required structured data or product metadata is inaccessible. Visible currency text alone is not accepted as proof of a product price.
 - Rejects PLPs, homepages, seller profiles, search pages, categories, collections and filtered result pages.

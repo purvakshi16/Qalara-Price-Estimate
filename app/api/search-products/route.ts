@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { load } from "cheerio";
 import { deleteReference, uploadReference } from "../../../lib/temporary-images";
 
-type Region = "UK" | "US" | "EU";
+type Region = "UK" | "US" | "EU" | "AU";
 type Dimensions = { length?: string; width?: string; height?: string; unit?: "cm" | "in" };
 type SearchRequest = { productName: string; description?: string; material?: string; dimensions?: Dimensions; region: Region; stage?: string; imageDataUrl?: string };
 type RecordValue = Record<string, unknown>;
@@ -18,6 +18,7 @@ const regions = {
   US: { currency: "USD", location: "US", language: "en", market: "United States", marketplaceDomains: ["amazon.com", "etsy.com", "ebay.com", "alibaba.com"] },
   UK: { currency: "GBP", location: "GB", language: "en", market: "United Kingdom", marketplaceDomains: ["amazon.co.uk", "etsy.com", "ebay.co.uk", "alibaba.com"] },
   EU: { currency: "EUR", location: "DE", language: "de", market: "Germany", marketplaceDomains: ["amazon.de", "etsy.com", "ebay.de", "alibaba.com"] },
+  AU: { currency: "AUD", location: "AU", language: "en", market: "Australia", marketplaceDomains: ["amazon.com.au", "etsy.com", "ebay.com.au", "alibaba.com"] },
 };
 const TARGET_VALID_PDPS = 6;
 const FETCH_BATCH_SIZE = 6;
@@ -325,7 +326,10 @@ function primaryPdpTextPrice($: ReturnType<typeof load>, heading: string, curren
 function currencyAmounts(value: string, currency: string): number[] {
   const explicitCodes = value.toUpperCase().match(/\b(?:USD|EUR|GBP|CAD|AUD|INR)\b/g) ?? [];
   if (explicitCodes.some((code) => code !== currency)) return [];
-  const token = currency === "USD" ? "(?:US\\$|\\$|USD)" : currency === "EUR" ? "(?:€|EUR)" : "(?:£|GBP)";
+  const token = currency === "USD" ? "(?:US\\$|\\$|USD)"
+    : currency === "EUR" ? "(?:€|EUR)"
+      : currency === "AUD" ? "(?:AU\\$|A\\$|AUD)"
+        : "(?:£|GBP)";
   const matches = [
     ...value.matchAll(new RegExp(`${token}\\s*([0-9]+(?:[.,][0-9]{1,2})?)`, "gi")),
     ...value.matchAll(new RegExp(`([0-9]+(?:[.,][0-9]{1,2})?)\\s*${token}`, "gi")),
@@ -432,6 +436,7 @@ function isRegionCandidate(row: RecordValue, region: Region, currency: string) {
   if (!suffix) return true;
   if (region === "US") return suffix === "us";
   if (region === "UK") return suffix === "uk";
+  if (region === "AU") return suffix === "au";
   return EU_SUFFIXES.has(suffix);
 }
 const EU_SUFFIXES = new Set(["at", "be", "bg", "hr", "cy", "cz", "de", "dk", "ee", "es", "eu", "fi", "fr", "gr", "hu", "ie", "it", "lt", "lu", "lv", "mt", "nl", "pl", "pt", "ro", "se", "si", "sk"]);

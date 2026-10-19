@@ -39,6 +39,30 @@ test('extracts TinyFish simplified Shopify PDP text', async () => {
   assert.match(data.displayProducts[0].notes, /primary PDP text/);
 });
 
+test('searches Australia and extracts an AUD price from an Australian PDP', async () => {
+  const australianUrl = 'https://shop.example.com.au/products/cotton-tote';
+  const html = '<meta property="product:price:currency" content="AUD"><meta property="product:price:amount" content="39.95"><h1>Cotton tote</h1>';
+  const { api } = provider('', {
+    location: 'AU',
+    results: [{ url: australianUrl, title: 'Cotton tote AUD 39.95' }],
+    fetchResult: { results: [{ url: australianUrl, text: html }], errors: [] },
+  });
+  const data = await (await api.POST(request('AU'))).json();
+  assert.equal(data.currency, 'AUD');
+  assert.equal(data.displayProducts[0].price, 39.95);
+});
+
+test('does not visit a UK-domain candidate for an Australian search', async () => {
+  const { api } = provider('', {
+    location: 'AU',
+    results: [{ url: 'https://shop.example.co.uk/products/cotton-tote', title: 'Cotton tote GBP 20.00' }],
+    marketplaceResults: [],
+  });
+  const response = await api.POST(request('AU'));
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /No direct retail product links/);
+});
+
 test('uses explicit seller and product image from structured offer', async () => {
   const product = { '@type': 'Product', name: 'Cotton tote', image: '/tote.jpg', offers: { price: '25.50', priceCurrency: 'USD', seller: { name: 'Tote Studio' } } };
   const { api } = provider(`<script type="application/ld+json">${JSON.stringify(product)}</script><h1>Cotton tote</h1>`);
