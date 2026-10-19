@@ -322,10 +322,10 @@ export default function Home() {
                 <div className="field">
                   <label htmlFor="region">Region</label>
                   <select id="region" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value as Region })}>
-                    <option value="US">US - USD</option>
-                    <option value="UK">UK - GBP</option>
-                    <option value="EU">EU - EUR / Germany</option>
                     <option value="AU">Australia - AUD</option>
+                    <option value="EU">Europe - EUR</option>
+                    <option value="US">United States of America - USD</option>
+                    <option value="UK">United Kingdom - GBP</option>
                   </select>
                 </div>
                 {error ? (
@@ -343,7 +343,7 @@ export default function Home() {
 
           <section className="panel">
             <div className="panel-header">
-              <h2 className="panel-title">Estimate</h2>
+              <h2 className="panel-title">Search Results</h2>
             </div>
             <div className="panel-body">
               {response ? (
@@ -420,7 +420,6 @@ export default function Home() {
                   <div>
                     <div className="empty-icon">⌕</div>
                     <p>Enter a product and run a search to generate comparable market prices.</p>
-                    <p className="muted">Searches until six valid product pages are found, candidates are exhausted or time runs out.</p>
                   </div>
                 </div>
               )}
