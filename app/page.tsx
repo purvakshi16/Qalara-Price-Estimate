@@ -204,9 +204,8 @@ export default function Home() {
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <div className="brand-mark" aria-hidden="true">
-              ⌕
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="brand-mark" src="/qalara-icon.ico" alt="Qalara" />
             <div>
               <h1 className="brand-title">Market Price Estimator</h1>
               <p className="brand-subtitle">UK, US and EU selling price estimates from comparable sources</p>

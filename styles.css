@@ -1,14 +1,14 @@
 :root {
-  --background: #f6f7f3;
-  --foreground: #18211f;
-  --muted: #65706c;
-  --line: #d9ded6;
+  --background: #f3f1eb;
+  --foreground: #292d27;
+  --muted: #6f7067;
+  --line: #d6d0c5;
   --panel: #ffffff;
-  --panel-soft: #eef4f0;
-  --accent: #19735d;
-  --accent-dark: #105443;
-  --danger: #aa3d32;
-  --shadow: 0 16px 40px rgba(30, 42, 36, 0.08);
+  --panel-soft: #e9ede2;
+  --accent: #5f6f52;
+  --accent-dark: #3f4c38;
+  --danger: #a34f3d;
+  --shadow: 0 16px 40px rgba(54, 47, 38, 0.1);
 }
 
 * {
@@ -45,7 +45,7 @@ a {
 
 .topbar {
   border-bottom: 1px solid var(--line);
-  background: rgba(246, 247, 243, 0.92);
+  background: rgba(243, 241, 235, 0.94);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -70,15 +70,13 @@ a {
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 38px;
   height: 38px;
-  border-radius: 8px;
-  background: #173f37;
-  color: #f6f7f3;
-  font-size: 25px;
-  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  object-fit: contain;
+  padding: 4px;
 }
 
 .brand-title {
@@ -137,7 +135,7 @@ a {
 }
 
 .field label {
-  color: #2f3b37;
+  color: #3b4038;
   font-size: 13px;
   font-weight: 700;
 }
@@ -148,7 +146,7 @@ a {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 0;
-  background: #fbfcfa;
+  background: #fdfcf8;
   color: var(--foreground);
   padding: 11px 12px;
   outline: none;
@@ -174,7 +172,7 @@ a {
 
 .dimension-field legend {
   padding: 0;
-  color: #2f3b37;
+  color: #3b4038;
   font-size: 13px;
   font-weight: 700;
 }
@@ -198,7 +196,7 @@ a {
 }
 
 .required-mark {
-  color: #b43b2e;
+  color: #a34f3d;
 }
 
 .sr-only {
@@ -231,7 +229,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 6px;
   aspect-ratio: 1;
-  background: #eef4f0;
+  background: #e9ede2;
 }
 
 .image-preview img {
@@ -251,7 +249,7 @@ a {
 .field textarea:focus,
 .field select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(25, 115, 93, 0.12);
+  box-shadow: 0 0 0 3px rgba(95, 111, 82, 0.18);
 }
 
 .button-row {
@@ -346,7 +344,7 @@ a {
 .metric {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #fdfcf8;
   padding: 14px;
   min-height: 94px;
 }
@@ -390,7 +388,7 @@ a {
   margin-top: 12px;
   border: 1px solid var(--line);
   padding: 14px;
-  background: #fbfcfa;
+  background: #fdfcf8;
 }
 
 .diagnostic-grid {
@@ -456,8 +454,8 @@ td {
 }
 
 th {
-  background: #eef4f0;
-  color: #33413c;
+  background: #e9ede2;
+  color: #3b4038;
   font-size: 12px;
   text-transform: uppercase;
 }
@@ -494,13 +492,13 @@ tr:last-child td {
 }
 
 .status.accepted {
-  background: #dff4ea;
-  color: #12624d;
+  background: #e3eadb;
+  color: #40523a;
 }
 
 .status.rejected {
-  background: #f7e3df;
-  color: #963529;
+  background: #f3e2dc;
+  color: #8f4335;
 }
 
 .decision-actions {
@@ -523,7 +521,7 @@ tr:last-child td {
 }
 
 .moq-cell strong {
-  color: #33413c;
+  color: #3b4038;
 }
 
 .moq-not-found {
@@ -537,7 +535,7 @@ tr:last-child td {
   width: 52px;
   height: 28px;
   border-radius: 999px;
-  background: #eef1f3;
+  background: #eeece5;
   font-weight: 800;
 }
 
@@ -545,7 +543,7 @@ tr:last-child td {
   display: grid;
   place-items: center;
   min-height: 360px;
-  border: 1px dashed #c7cec8;
+  border: 1px dashed #c9c1b4;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.58);
   color: var(--muted);
@@ -563,7 +561,7 @@ tr:last-child td {
   margin-top: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #fdfcf8;
 }
 
 .details summary {
@@ -601,7 +599,7 @@ tr:last-child td {
   border: 1px solid var(--line);
   border-radius: 6px;
   object-fit: cover;
-  background: #eef4f0;
+  background: #e9ede2;
   color: var(--muted);
   display: grid;
   place-items: center;
@@ -621,24 +619,24 @@ tr:last-child td {
   margin: 14px 0;
   padding: 12px;
   border: 1px solid var(--line);
-  background: #f7faf8;
-  color: #33413c;
+  background: #f5f4ef;
+  color: #3b4038;
   font-size: 13px;
 }
 
 .relevance-control {
   display: inline-flex;
-  border: 1px solid #aeb8b2;
+  border: 1px solid #b8b0a4;
 }
 
 .relevance-control button {
   min-height: 30px;
   border: 0;
-  border-right: 1px solid #aeb8b2;
+  border-right: 1px solid #b8b0a4;
   border-radius: 0;
   padding: 5px 8px;
   background: #ffffff;
-  color: #33413c;
+  color: #3b4038;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -648,7 +646,7 @@ tr:last-child td {
 }
 
 .relevance-control button.active {
-  background: #175f4f;
+  background: #5f6f52;
   color: #ffffff;
 }
 
