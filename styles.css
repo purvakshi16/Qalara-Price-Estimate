@@ -493,12 +493,23 @@ table {
 }
 
 .results-table .seller-column {
-  width: 90px;
+  width: 165px;
 }
 
 .results-table .price-cell {
   white-space: nowrap;
   font-weight: 700;
+}
+
+.results-table .seller-cell {
+  overflow-wrap: anywhere;
+  padding-right: 18px;
+}
+
+.results-table .seller-cell a {
+  color: var(--accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 th,

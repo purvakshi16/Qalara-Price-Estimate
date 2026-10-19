@@ -420,7 +420,11 @@ export default function Home() {
                               </td>
                               <td className="price-cell">{formatProductPrice(product)}</td>
                               <td>{product.marketplace}</td>
-                              <td>{product.seller}</td>
+                              <td className="seller-cell">
+                                {sellerWebsiteUrl(product) ? (
+                                  <a href={sellerWebsiteUrl(product)} target="_blank" rel="noreferrer">{product.seller}</a>
+                                ) : product.seller}
+                              </td>
                             </tr>
                         ))}
                       </tbody>
@@ -464,6 +468,12 @@ function formatProductPrice(product: ProductResult) {
   const min = product.minPrice ?? product.price;
   const max = product.maxPrice ?? product.price;
   return min === max ? formatMoney(min, product.currency) : `${formatMoney(min, product.currency)} - ${formatMoney(max, product.currency)}`;
+}
+
+function sellerWebsiteUrl(product: ProductResult) {
+  if (product.marketplace !== "Seller website" || product.seller === "Not listed") return "";
+  try { return new URL(product.productUrl).origin; }
+  catch { return ""; }
 }
 
 function downloadFileName(productName: string, region: Region) {
