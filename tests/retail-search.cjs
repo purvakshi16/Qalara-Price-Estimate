@@ -48,6 +48,44 @@ test('uses explicit seller and product image from structured offer', async () =>
   assert.equal(data.displayProducts[0].imageUrl, 'https://shop.example/tote.jpg');
 });
 
+test('uses the independent website name when no separate seller is listed', async () => {
+  const storeUrl = 'https://uniquehomefurniture.co.uk/products/cotton-tote';
+  const { api } = provider('', {
+    location: 'GB',
+    results: [{ url: storeUrl, title: 'Cotton tote' }],
+    fetchResult: { results: [{ url: storeUrl, text: '<meta property="og:site_name" content="Unique Home Furniture"><h1>Cotton tote</h1><p>£19.99</p>' }], errors: [] },
+  });
+  const data = await (await api.POST(request('UK'))).json();
+  assert.equal(data.displayProducts[0].marketplace, 'Seller website');
+  assert.equal(data.displayProducts[0].seller, 'Unique Home Furniture');
+});
+
+test('uses an Etsy shop name and rejects seller policy instructions', async () => {
+  const etsyUrl = 'https://www.etsy.com/uk/listing/123/cotton-tote';
+  const html = '<h1>Cotton tote</h1><a href="/uk/shop/ToteStudio">ToteStudio</a><p>£24.00</p><p>Seller does not accept returns</p>';
+  const { api } = provider('', {
+    location: 'GB',
+    marketplaceResults: [{ url: etsyUrl, title: 'Cotton tote' }],
+    results: [],
+    fetchResult: { results: [{ url: etsyUrl, text: html }], errors: [] },
+  });
+  const data = await (await api.POST(request('UK'))).json();
+  assert.equal(data.displayProducts[0].marketplace, 'Etsy');
+  assert.equal(data.displayProducts[0].seller, 'ToteStudio');
+});
+
+test('does not treat marketplace return instructions as a seller name', async () => {
+  const etsyUrl = 'https://www.etsy.com/uk/listing/124/cotton-tote';
+  const { api } = provider('', {
+    location: 'GB',
+    marketplaceResults: [{ url: etsyUrl, title: 'Cotton tote' }],
+    results: [],
+    fetchResult: { results: [{ url: etsyUrl, text: '<h1>Cotton tote</h1><p>£24.00</p><p>Seller does not accept returns</p>' }], errors: [] },
+  });
+  const data = await (await api.POST(request('UK'))).json();
+  assert.equal(data.displayProducts[0].seller, 'Not listed');
+});
+
 test('merges duplicate product schemas when identity and price agree', async () => {
   const product = { '@type': 'Product', '@id': `${url}#this`, name: 'Cotton tote', image: '/tote.jpg', offers: { price: '25.50', priceCurrency: 'USD', seller: { name: 'Tote Studio' } } };
   const duplicate = { ...product, url, image: '/larger-tote.jpg' };

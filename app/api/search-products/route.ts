@@ -174,6 +174,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   const $ = load(text(page.text));
   const heading = $("h1").first().text().trim();
   const title = heading || text(page.title) || text(candidate.title);
+  const marketplaceName = marketplace(url);
   if (isNonPhysicalProductPage(title, $)) return null;
   const structuredProducts: RecordValue[] = [];
   for (const element of $('script[type="application/ld+json"]').toArray()) {
@@ -224,7 +225,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   const primary = lines.slice(Math.max(0, start), Math.max(0, start) + 100);
   const stop = primary.findIndex((line) => /you may also|related products|recommended products|customers also|recently viewed/i.test(line));
   const content = (stop >= 0 ? primary.slice(0, stop) : primary).join("\n").slice(0, 5000);
-  if (seller === "Not listed") seller = content.match(/(?:sold by|seller|verkauft von)\s*[:\-]?\s*([^\n]{2,100})/i)?.[1]?.trim() || "Not listed";
+  seller = resolveSeller($, url, marketplaceName, seller, content);
   if (!imageUrl) {
     imageUrl = resolveUrl($("meta[property='og:image']").first().attr("content") || "", url);
     if (!imageUrl) {
@@ -235,7 +236,41 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
     if (!imageUrl) imageUrl = text(candidate.sourceImage);
   }
   const matchScore = candidateAttributeScore({ ...candidate, title, description: content }, input);
-  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplace(url), productUrl: url, imageUrl, pageType: "PDP", notes: evidence, matchScore };
+  return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplaceName, productUrl: url, imageUrl, pageType: "PDP", notes: evidence, matchScore };
+}
+
+function resolveSeller($: ReturnType<typeof load>, url: string, marketplaceName: string, current: string, content: string) {
+  const structuredSeller = validSellerName(current);
+  if (structuredSeller) return structuredSeller;
+  if (marketplaceName === "Seller website") return websiteName($, url);
+  const selectors: Record<string, string[]> = {
+    Etsy: ['a[href*="/shop/"]'],
+    Amazon: ["#sellerProfileTriggerId", "#merchant-info a", ".tabular-buybox-text a"],
+    eBay: ['.ux-seller-section__item--seller a', '[data-testid*="seller"] a'],
+    Alibaba: ['[class*="supplier"] a', '[class*="company"] a'],
+  };
+  const candidates = (selectors[marketplaceName] ?? []).flatMap((selector) =>
+    $(selector).toArray().map((element) => $(element).text().replace(/\s+/g, " ").trim()));
+  const explicit = content.match(/(?:sold|dispatched|ships?)\s+by\s*[:\-]?\s*([^\n|]{2,80})/i)?.[1] ?? "";
+  return [...candidates, explicit].map(validSellerName).find(Boolean) || "Not listed";
+}
+
+function websiteName($: ReturnType<typeof load>, url: string) {
+  const candidates = [
+    $("meta[property='og:site_name']").first().attr("content") ?? "",
+    $("meta[name='application-name']").first().attr("content") ?? "",
+  ];
+  const named = candidates.map(validSellerName).find(Boolean);
+  if (named) return named;
+  try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); }
+  catch { return "Not listed"; }
+}
+
+function validSellerName(value: string) {
+  const name = value.replace(/\s+/g, " ").trim().replace(/^[\s:|,\-]+|[\s:|,\-]+$/g, "");
+  if (!name || name === "Not listed" || name.length < 2 || name.length > 80) return "";
+  if (/\b(?:accept|return|refund|delivery|shipping|dispatch|policy|instruction|condition|quantity|warranty|payment|checkout|basket|cart)\b/i.test(name)) return "";
+  return name;
 }
 
 function amount(value: unknown): number | null {
