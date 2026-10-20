@@ -365,6 +365,47 @@ test('uses SearchAPI only when it is selected for the search', async () => {
   assert.equal(serpApiCalls, 0);
 });
 
+test('adds direct Firecrawl discovery candidates when configured', async () => {
+  const firecrawlUrl = 'https://firecrawl-shop.example/products/cotton-tote';
+  let discoveryCalls = 0;
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.firecrawl.dev') {
+      discoveryCalls += 1;
+      assert.equal(parsed.pathname, '/v2/search');
+      assert.equal(init.headers.Authorization, 'Bearer firecrawl-test-key');
+      return Response.json({ success: true, data: { web: [{ url: firecrawlUrl, title: 'Cotton tote', description: 'Cotton shopping tote' }] } });
+    }
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [{ url: firecrawlUrl, text: '<h1>Cotton tote</h1><p>$29.00 USD</p>' }], errors: [] });
+  }, 'test-key', { env: { FIRECRAWL_API_KEY: 'firecrawl-test-key' } });
+  const response = await api.POST(request());
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).displayProducts[0].productUrl, firecrawlUrl);
+  assert.equal(discoveryCalls, 1);
+});
+
+test('uses limited Firecrawl scraping when TinyFish omits a candidate page', async () => {
+  const candidateUrl = 'https://blocked-shop.example/products/cotton-tote';
+  let scrapeCalls = 0;
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'api.firecrawl.dev') {
+      if (parsed.pathname === '/v2/search') return Response.json({ success: true, data: { web: [] } });
+      scrapeCalls += 1;
+      assert.equal(parsed.pathname, '/v2/scrape');
+      assert.equal(JSON.parse(init.body).proxy, 'basic');
+      return Response.json({ success: true, data: { html: '<h1>Cotton tote</h1><p>$31.00 USD</p>', metadata: { sourceURL: candidateUrl } } });
+    }
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [{ url: candidateUrl, title: 'Cotton tote' }] });
+    if (parsed.hostname === 'api.fetch.tinyfish.ai') return Response.json({ results: [], errors: [{ url: candidateUrl }] });
+  }, 'test-key', { env: { FIRECRAWL_API_KEY: 'firecrawl-test-key' } });
+  const response = await api.POST(request());
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).displayProducts[0].price, 31);
+  assert.equal(scrapeCalls, 1);
+});
+
 test('does not fetch visual listing pages or pattern candidates', async () => {
   let fetchedUrls = [];
   const api = route(async (endpoint, init) => {

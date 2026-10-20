@@ -16,7 +16,7 @@ function route(fetch, key = 'test-key', services = {}) {
   vm.runInNewContext(compiled, {
     exports, fetch: wrappedFetch, Request, Response, URL, URLSearchParams, AbortSignal, console, load,
     NextResponse: Response, existsSync: fs.existsSync, readFileSync: fs.readFileSync,
-    join: require('node:path').join, process: { env: { TINYFISH_API_KEY: key, SERPAPI_API_KEY: 'serpapi-test-key', ...services.env } },
+    join: require('node:path').join, process: { cwd: () => process.cwd(), env: { TINYFISH_API_KEY: key, SERPAPI_API_KEY: 'serpapi-test-key', ...services.env } },
     uploadReference: services.uploadReference ?? (async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' })),
     deleteReference: services.deleteReference ?? (async () => undefined),
   });

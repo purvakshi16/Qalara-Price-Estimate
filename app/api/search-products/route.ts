@@ -23,6 +23,7 @@ const regions = {
 };
 const TARGET_VALID_PDPS = 6;
 const FETCH_BATCH_SIZE = 6;
+const FIRECRAWL_FETCH_FALLBACK_LIMIT = 2;
 const SEARCH_BUDGET_MS = 85_000;
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
     const config = regions[input.region] ?? regions.US;
     const apiKey = getApiKey();
     if (!apiKey) throw new Error("Set TINYFISH_API_KEY in the project's environment variables.");
+    const firecrawlKey = getFirecrawlKey();
     const signal = AbortSignal.timeout(SEARCH_BUDGET_MS);
     const dimensionQuery = dimensionText(input.dimensions);
     const query = [input.productName.trim(), input.material?.trim(), dimensionQuery, input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
@@ -56,9 +58,13 @@ export async function POST(request: Request) {
     const marketplaceParams = new URLSearchParams({ query: marketplaceQuery, location: config.location, language: config.language,
       purpose: `Find direct product-detail pages for ${input.productName} on Amazon, Etsy, eBay or Alibaba in ${config.market}. Exclude marketplace search, category, filter and collection pages.`,
     });
-    const [generalSearch, marketplaceSearch] = await Promise.all([
+    const [generalSearch, marketplaceSearch, firecrawlSearch] = await Promise.all([
       providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal),
       providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
+      firecrawlKey ? firecrawlSearchJson(query, config, firecrawlKey, signal).catch((error) => {
+        console.warn("Firecrawl discovery was skipped after an error", safeError(error));
+        return {};
+      }) : Promise.resolve({}),
     ]);
     const visualCandidates = records(visualSearch.visual_matches).map((row) => ({ ...row, url: text(row.link), visualMatch: true,
       sourceImage: visualResultImage(row) }))
@@ -68,14 +74,18 @@ export async function POST(request: Request) {
       .filter((row) => !isMarketplaceUrl(text(row.url)) && isDirectProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency));
     const marketplaceCandidates = rankedCandidates(marketplaceSearch)
       .filter((row) => isMarketplaceProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency));
+    const firecrawlCandidates = rankedCandidates(firecrawlSearch)
+      .filter((row) => isDirectProductUrl(text(row.url)) && isRegionCandidate(row, input.region, config.currency));
     const unique = interleaveCandidates([
       rankByAttributes(visualCandidates, input),
       rankByAttributes(generalCandidates, input),
       rankByAttributes(marketplaceCandidates, input),
+      rankByAttributes(firecrawlCandidates, input),
     ]);
     if (!unique.length) return NextResponse.json({ error: "No direct retail product links were found. Try a more specific product name." }, { status: 422 });
     const products: ProductResult[] = [];
     let pagesAccessed = 0;
+    let firecrawlFallbacks = 0;
     let cursor = 0;
     while (products.length < TARGET_VALID_PDPS && cursor < unique.length && Date.now() < deadline - 4_000) {
       const batch = unique.slice(cursor, cursor + FETCH_BATCH_SIZE);
@@ -87,8 +97,11 @@ export async function POST(request: Request) {
           purpose: "Read the main retail product's current price, currency, product image and listed seller. Do not research wholesale.",
         });
       } catch (error) {
-        if (products.length || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))) break;
-        throw error;
+        if (firecrawlKey && !(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))) {
+          console.warn("TinyFish fetch failed; trying limited Firecrawl recovery", safeError(error));
+          fetched = { results: [] };
+        } else if (products.length || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))) break;
+        else throw error;
       }
       const fetchedPages = records(fetched.results);
       pagesAccessed += fetchedPages.length;
@@ -98,6 +111,22 @@ export async function POST(request: Request) {
         const product = extractProduct(page, candidate, config.currency, input);
         if (product) products.push(product);
         if (products.length === TARGET_VALID_PDPS) break;
+      }
+      if (firecrawlKey && products.length < TARGET_VALID_PDPS && firecrawlFallbacks < FIRECRAWL_FETCH_FALLBACK_LIMIT) {
+        const returnedUrls = new Set(fetchedPages.flatMap((page) => [text(page.url), text(page.final_url)]).filter(Boolean));
+        const missing = batch.filter((candidate) => !returnedUrls.has(text(candidate.url)));
+        for (const candidate of missing) {
+          if (firecrawlFallbacks >= FIRECRAWL_FETCH_FALLBACK_LIMIT || products.length >= TARGET_VALID_PDPS || Date.now() >= deadline - 4_000) break;
+          firecrawlFallbacks += 1;
+          const page = await firecrawlScrapePage(text(candidate.url), firecrawlKey, signal).catch((error) => {
+            console.warn("Firecrawl PDP recovery failed", safeError(error));
+            return null;
+          });
+          if (!page) continue;
+          pagesAccessed += 1;
+          const product = extractProduct(page, candidate, config.currency, input);
+          if (product) products.push(product);
+        }
       }
     }
     const searched = {
@@ -147,6 +176,14 @@ function getSerpApiKey() {
   if (!existsSync(path)) return "";
   const content = readFileSync(path, "utf8");
   return content.match(/SERPAPI_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? "";
+}
+
+function getFirecrawlKey() {
+  if (process.env.FIRECRAWL_API_KEY) return process.env.FIRECRAWL_API_KEY.trim();
+  const path = join(process.cwd(), "API keys.txt");
+  if (!existsSync(path)) return "";
+  const content = readFileSync(path, "utf8");
+  return content.match(/FIRECRAWL_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? "";
 }
 
 function imageSearchProvider(input: SearchRequest): ImageSearchProvider {
@@ -218,6 +255,43 @@ async function providerJson(url: string, key: string, signal: AbortSignal, body?
   }
   try { return JSON.parse(await response.text()) as RecordValue; }
   catch { throw new Error("TinyFish returned an unreadable response. No paid fallback was used."); }
+}
+
+async function firecrawlSearchJson(query: string, config: (typeof regions)[keyof typeof regions], key: string, signal: AbortSignal): Promise<RecordValue> {
+  const payload = await firecrawlJson("https://api.firecrawl.dev/v2/search", key, signal, {
+    query: `${query} ${config.market} direct product page`, limit: 10, sources: [{ type: "web" }],
+  });
+  const data = asRecord(payload.data);
+  const web = records(data.web).length ? records(data.web) : records(payload.data);
+  return { results: web.map((row) => ({ ...row, url: text(row.url), snippet: text(row.description) })) };
+}
+
+async function firecrawlScrapePage(url: string, key: string, signal: AbortSignal): Promise<RecordValue | null> {
+  const payload = await firecrawlJson("https://api.firecrawl.dev/v2/scrape", key, signal, {
+    url, formats: ["html"], onlyMainContent: false, proxy: "basic", timeout: 15_000,
+  });
+  const data = asRecord(payload.data);
+  const html = text(data.html);
+  if (!html) return null;
+  const metadata = asRecord(data.metadata);
+  return { url, final_url: text(metadata.sourceURL) || text(metadata.url) || url, title: text(metadata.title), text: html };
+}
+
+async function firecrawlJson(url: string, key: string, signal: AbortSignal, body: RecordValue): Promise<RecordValue> {
+  const response = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body), signal, cache: "no-store" });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) throw new Error("Firecrawl rejected FIRECRAWL_API_KEY.");
+    if ([402, 429].includes(response.status)) throw new Error("Firecrawl's free allowance or rate limit was reached.");
+    throw new Error(`Firecrawl returned HTTP ${response.status}.`);
+  }
+  const payload = JSON.parse(await response.text()) as RecordValue;
+  if (payload.success === false) throw new Error(text(payload.error) || "Firecrawl request failed.");
+  return payload;
+}
+
+function safeError(error: unknown) {
+  return error instanceof Error ? { name: error.name, message: error.message } : { message: "Unknown error" };
 }
 
 function extractProduct(page: RecordValue, candidate: RecordValue, currency: string, input: SearchRequest): ProductResult | null {

@@ -6,7 +6,7 @@ Backend-supported Vercel app for estimating current market selling prices in Aus
 
 - Product input: required name and image, optional description, material and dimensions, and region.
 - Region-based currency assumption: AUD, EUR, USD or GBP.
-- The user chooses SearchAPI or SerpApi Google Lens for each visual search; TinyFish Search and Fetch supply text discovery and PDP content.
+- The user chooses SearchAPI or SerpApi Google Lens for each visual search. TinyFish supplies primary text discovery and PDP content; Firecrawl adds web candidates and performs limited PDP recovery when configured.
 - Search continues until six valid PDPs are found, candidates are exhausted or the request deadline is reached.
 - Source list with marketplace, seller, retail price, product-page link and source product image where accessible. Wholesale and MOQ research are paused.
 - Price range and compact search diagnostics.
@@ -20,6 +20,7 @@ Create `.env.local`:
 TINYFISH_API_KEY=sk-tinyfish-your-key-here
 SERPAPI_API_KEY=your-serpapi-key-here
 SEARCHAPI_API_KEY=your-searchapi-key-here
+FIRECRAWL_API_KEY=your-firecrawl-key-here
 BLOB_READ_WRITE_TOKEN=your-vercel-blob-read-write-token
 ```
 
@@ -32,7 +33,7 @@ npm run dev
 
 ## Deploy on Vercel
 
-Add `TINYFISH_API_KEY`, `SEARCHAPI_API_KEY` and `SERPAPI_API_KEY` to Vercel Production and Preview. Connect a public Vercel Blob store so `BLOB_READ_WRITE_TOKEN` is available. The form calls only the image-search provider selected by the user.
+Add `TINYFISH_API_KEY`, `SEARCHAPI_API_KEY`, `SERPAPI_API_KEY` and `FIRECRAWL_API_KEY` to Vercel Production and Preview. Connect a public Vercel Blob store so `BLOB_READ_WRITE_TOKEN` is available. The form calls only the image-search provider selected by the user.
 
 For this update, upload `app/page.tsx`, `app/api/search-products/route.ts`, `package.json`, `pnpm-lock.yaml` and `vercel.json` through GitHub, then redeploy. The package and lockfile include the HTML parser used to extract prices.
 
