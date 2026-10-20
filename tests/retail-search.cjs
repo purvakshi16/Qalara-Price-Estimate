@@ -337,6 +337,34 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
   assert.equal(deletedReceipt, 'cleanup-receipt');
 });
 
+test('uses SearchAPI only when it is selected for the search', async () => {
+  const visualUrl = 'https://visual-shop.example/products/cotton-tote-searchapi';
+  let searchApiCalls = 0;
+  let serpApiCalls = 0;
+  const api = route(async (endpoint, init) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'www.searchapi.io') {
+      searchApiCalls += 1;
+      assert.equal(init.headers.Authorization, 'Bearer searchapi-test-key');
+      assert.equal(parsed.searchParams.get('search_type'), 'visual_matches');
+      return Response.json({ visual_matches: [{ link: visualUrl, title: 'Cotton tote', image: { link: 'https://visual-shop.example/tote.jpg' } }] });
+    }
+    if (parsed.hostname === 'serpapi.com') {
+      serpApiCalls += 1;
+      return Response.json({ visual_matches: [] });
+    }
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [{ url: visualUrl, text: '<h1>Cotton tote</h1><p>$24.00 USD</p>' }], errors: [] });
+  }, 'test-key', {
+    env: { SEARCHAPI_API_KEY: 'searchapi-test-key' },
+    uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' }),
+  });
+  const response = await api.POST(request('US', { imageSearchProvider: 'searchapi' }));
+  assert.equal(response.status, 200);
+  assert.equal(searchApiCalls, 1);
+  assert.equal(serpApiCalls, 0);
+});
+
 test('does not fetch visual listing pages or pattern candidates', async () => {
   let fetchedUrls = [];
   const api = route(async (endpoint, init) => {

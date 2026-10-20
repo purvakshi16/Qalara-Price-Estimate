@@ -188,6 +188,62 @@ a {
   font-weight: 700;
 }
 
+.provider-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.provider-field legend {
+  padding: 0;
+  color: #3b4038;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.provider-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.provider-options label {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.provider-options label + label {
+  border-left: 1px solid var(--line);
+}
+
+.provider-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.provider-options span {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  background: #fdfcf8;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.provider-options input:checked + span {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.provider-options input:focus-visible + span {
+  outline: 3px solid rgba(95, 111, 82, 0.28);
+  outline-offset: -3px;
+}
+
 .dimension-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -5,8 +5,9 @@ import { load } from "cheerio";
 import { deleteReference, uploadReference } from "../../../lib/temporary-images";
 
 type Region = "UK" | "US" | "EU" | "AU";
+type ImageSearchProvider = "searchapi" | "serpapi";
 type Dimensions = { length?: string; width?: string; height?: string; unit?: "cm" | "in" };
-type SearchRequest = { productName: string; description?: string; material?: string; dimensions?: Dimensions; region: Region; stage?: string; imageDataUrl?: string };
+type SearchRequest = { productName: string; description?: string; material?: string; dimensions?: Dimensions; region: Region; stage?: string; imageDataUrl?: string; imageSearchProvider?: ImageSearchProvider };
 type RecordValue = Record<string, unknown>;
 type ProductResult = {
   title: string; price: number; currency: string; seller: string; marketplace: string;
@@ -148,7 +149,8 @@ function getSerpApiKey() {
   return content.match(/SERPAPI_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? "";
 }
 
-function imageSearchProvider() {
+function imageSearchProvider(input: SearchRequest): ImageSearchProvider {
+  if (input.imageSearchProvider === "searchapi" || input.imageSearchProvider === "serpapi") return input.imageSearchProvider;
   return process.env.IMAGE_SEARCH_PROVIDER?.trim().toLowerCase() === "searchapi" ? "searchapi" : "serpapi";
 }
 
@@ -156,9 +158,9 @@ async function visualSearchJson(imageUrl: string, input: SearchRequest, dimensio
   config: (typeof regions)[keyof typeof regions], signal: AbortSignal) {
   const query = [input.productName.trim(), input.material?.trim(), dimensionQuery,
     input.description?.trim().slice(0, 100), config.market, config.currency].filter(Boolean).join(" ");
-  if (imageSearchProvider() === "searchapi") {
+  if (imageSearchProvider(input) === "searchapi") {
     const key = getSearchApiKey();
-    if (!key) throw new Error("Set SEARCHAPI_API_KEY to enable the disabled SearchAPI image-search implementation.");
+    if (!key) throw new Error("Set SEARCHAPI_API_KEY in the project's environment variables to use SearchAPI image search.");
     const params = new URLSearchParams({ engine: "google_lens", search_type: "visual_matches", url: imageUrl,
       q: query, country: config.location, hl: config.language });
     return searchApiJson(`https://www.searchapi.io/api/v1/search?${params}`, key, signal);

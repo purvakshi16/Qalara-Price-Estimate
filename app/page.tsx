@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 
 type Region = "UK" | "US" | "EU" | "AU";
+type ImageSearchProvider = "searchapi" | "serpapi";
 
 type ProductResult = {
   title: string;
@@ -42,6 +43,7 @@ const initialForm = {
   dimensionHeight: "",
   dimensionUnit: "cm",
   region: "US" as Region,
+  imageSearchProvider: "searchapi" as ImageSearchProvider,
 };
 
 const SEARCH_TIMEOUT_MS = 105_000;
@@ -133,6 +135,7 @@ export default function Home() {
           description: form.description,
           material: form.material,
           region: form.region,
+          imageSearchProvider: form.imageSearchProvider,
           dimensions: {
             length: form.dimensionLength,
             width: form.dimensionWidth,
@@ -334,6 +337,23 @@ export default function Home() {
                     <option value="UK">United Kingdom - GBP</option>
                   </select>
                 </div>
+                <fieldset className="field provider-field">
+                  <legend>Image search provider</legend>
+                  <div className="provider-options">
+                    <label>
+                      <input type="radio" name="imageSearchProvider" value="searchapi"
+                        checked={form.imageSearchProvider === "searchapi"}
+                        onChange={() => setForm({ ...form, imageSearchProvider: "searchapi" })} />
+                      <span>SearchAPI</span>
+                    </label>
+                    <label>
+                      <input type="radio" name="imageSearchProvider" value="serpapi"
+                        checked={form.imageSearchProvider === "serpapi"}
+                        onChange={() => setForm({ ...form, imageSearchProvider: "serpapi" })} />
+                      <span>SerpApi</span>
+                    </label>
+                  </div>
+                </fieldset>
                 {error ? (
                   <p className="source-meta error" role="alert">
                     {error}
