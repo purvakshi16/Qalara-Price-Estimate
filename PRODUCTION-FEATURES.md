@@ -17,7 +17,7 @@ This document records the functionality intended to be active in the current pro
 
 ## Retail Search
 
-- Uses a two-stage search and validation flow. Stage one discovers and ranks direct PDP candidates using image-search position plus product name, description, material and dimensions. Stage two fetches those candidates, admits only accessible PDPs with defensible region-currency prices, and reranks the valid products using the content found on each PDP.
+- Uses a two-stage search and validation flow. Stage one discovers and ranks direct PDP candidates using image-search position plus product name, description, material and dimensions. Stage two fetches those candidates and admits only accessible PDPs with a matching product type, an explicit material match when material was supplied, a meaningful description-detail match when available, and a defensible region-currency price. Colour differences do not block a match.
 - Uses free search and page-fetch operations only. Paid browser-agent fallback is disabled.
 - Runs one general retail search and one region-aware marketplace search.
 - Applies no fixed candidate or marketplace-page cap. It interleaves visual, general retail and marketplace PDP candidates, fetches them in operational batches, and stops when six valid PDPs are found, all returned candidates are exhausted or the Vercel-safe execution deadline is reached.

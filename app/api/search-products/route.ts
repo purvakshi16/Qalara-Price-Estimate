@@ -274,6 +274,7 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   const primary = lines.slice(Math.max(0, start), Math.max(0, start) + 100);
   const stop = primary.findIndex((line) => /you may also|related products|recommended products|customers also|recently viewed/i.test(line));
   const content = (stop >= 0 ? primary.slice(0, stop) : primary).join("\n").slice(0, 5000);
+  if (!passesPdpRelevance(title, content, input)) return null;
   seller = resolveSeller($, url, marketplaceName, seller, content);
   if (!imageUrl) {
     imageUrl = resolveUrl($("meta[property='og:image']").first().attr("content") || "", url);
@@ -436,6 +437,33 @@ function meaningfulTokens(value: string) {
 }
 function tokenCoverage(tokens: string[], haystack: string) {
   return tokens.length ? tokens.filter((token) => haystack.includes(token)).length / tokens.length : 0;
+}
+function passesPdpRelevance(title: string, content: string, input: SearchRequest) {
+  const pageTokens = meaningfulTokens(`${title} ${content}`);
+  const nameTokens = meaningfulTokens(input.productName);
+  const matchedNameTokens = nameTokens.filter((token) => tokenMatch(token, pageTokens)).length;
+  const minimumNameMatches = nameTokens.length <= 1 ? nameTokens.length : Math.max(1, Math.ceil(nameTokens.length * 0.4));
+  if (matchedNameTokens < minimumNameMatches) return false;
+
+  const materialOptions = (input.material ?? "").split(/[,/|]+/)
+    .map((value) => meaningfulTokens(value)).filter((tokens) => tokens.length);
+  if (materialOptions.length && !materialOptions.some((option) => option.every((token) => tokenMatch(token, pageTokens)))) return false;
+
+  const excluded = new Set([...nameTokens, ...materialOptions.flat()]);
+  const descriptionTokens = meaningfulDescriptionTokens(input.description ?? "").filter((token) => !excluded.has(token));
+  if (descriptionTokens.length && !descriptionTokens.some((token) => tokenMatch(token, pageTokens))) return false;
+  return true;
+}
+function meaningfulDescriptionTokens(value: string) {
+  const ignored = new Set([
+    "black", "blue", "brown", "colour", "color", "cream", "gold", "gray", "green", "grey", "orange", "pink", "purple", "red", "silver", "white", "yellow",
+    "beautiful", "classic", "finish", "finished", "good", "great", "large", "medium", "modern", "premium", "quality", "small", "style", "stylish", "use", "used",
+  ]);
+  return meaningfulTokens(value).filter((token) => !ignored.has(token));
+}
+function tokenMatch(expected: string, actualTokens: string[]) {
+  return actualTokens.some((actual) => actual === expected
+    || (expected.length >= 4 && actual.length >= 4 && (actual.startsWith(expected) || expected.startsWith(actual))));
 }
 function escapeRegExp(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function rankedCandidates(search: RecordValue) {

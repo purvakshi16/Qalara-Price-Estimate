@@ -44,7 +44,7 @@ test('extracts a single requested-currency price from primary PDP text', async (
 test('extracts TinyFish simplified Shopify PDP text', async () => {
   const html = '<html><body><h1>Napkin - Soft Cotton Club</h1><p>Regular price €6,50 EUR</p><p>Quantity</p><p>20 Soft Luxury napkins, 40 x 40 cm.</p></body></html>';
   const { api } = provider(html, { location: 'DE' });
-  const data = await (await api.POST(request('EU'))).json();
+  const data = await (await api.POST(request('EU', { productName: 'Cotton napkin' }))).json();
   assert.equal(data.displayProducts[0].price, 6.5);
   assert.match(data.displayProducts[0].notes, /primary PDP text/);
 });
@@ -179,6 +179,26 @@ test('ranks stronger attribute matches before unrelated candidates', async () =>
   assert.equal(response.status, 200);
   assert.equal(fetchedUrls[0], bestUrl);
   assert.equal((await response.json()).displayProducts[0].productUrl, bestUrl);
+});
+
+test('rejects a priced PDP when its product type is unrelated', async () => {
+  const { api } = provider('<h1>Leather shoulder bag</h1><p>$20.00</p>');
+  assert.equal((await api.POST(request())).status, 422);
+});
+
+test('requires the supplied material to be supported by the PDP', async () => {
+  const { api } = provider('<h1>Leather tote bag</h1><p>Full grain leather construction.</p><p>$20.00</p>');
+  assert.equal((await api.POST(request('US', { material: 'cotton' }))).status, 422);
+});
+
+test('requires a distinctive description detail but ignores colour differences', async () => {
+  const { api: matchingApi } = provider('<h1>Blue woven cotton tote</h1><p>Long shoulder handles.</p><p>$20.00</p>');
+  const matching = await matchingApi.POST(request('US', { description: 'Pink woven design', material: 'cotton' }));
+  assert.equal(matching.status, 200);
+
+  const { api: unrelatedApi } = provider('<h1>Cotton tote</h1><p>Plain canvas shopping bag.</p><p>$20.00</p>');
+  const unrelated = await unrelatedApi.POST(request('US', { description: 'Woven design', material: 'cotton' }));
+  assert.equal(unrelated.status, 422);
 });
 
 test('extracts Shopify Open Graph price metadata', async () => {
