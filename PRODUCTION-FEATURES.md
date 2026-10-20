@@ -1,6 +1,6 @@
 # Market Price Estimator: Production Features
 
-Last updated: 16 October 2026
+Last updated: 20 October 2026
 
 This document records the functionality intended to be active in the current production application. It should be updated alongside every production-facing feature change.
 
@@ -10,7 +10,7 @@ This document records the functionality intended to be active in the current pro
 - **Description:** Optional. Adds product characteristics such as finish, shape, use case and pack size.
 - **Material:** Optional. Narrows the search to the requested material.
 - **Product dimensions:** Optional structured length, width and height fields with centimetre or inch units. Enter only known finished-product dimensions.
-- **Image:** One JPEG, PNG or WebP image up to 2 MB is required. A Google Lens visual-match search runs before text discovery and its candidates receive first priority.
+- **Image:** One JPEG, PNG or WebP image up to 2 MB is required. A SerpApi Google Lens visual-match search runs before text discovery and its candidates receive first priority.
 - The image is temporarily uploaded to public Vercel Blob storage so the visual-search provider can read it, then deleted in the API route's `finally` cleanup whether the search succeeds or fails.
 - Product name, description, optional material and optional dimensions are sent alongside the image to improve visual-match relevance. Colour differences are allowed; material and dimensions only influence the search when entered.
 - **Region and currency:** US - USD is the default. UK - GBP, EU - EUR (Germany) and Australia - AUD are also available.
@@ -65,6 +65,5 @@ The Source item title is the direct link to the matched retail product page; the
 
 ## Currently Paused
 
-- Promotion of image search to the primary required field; this remains experimental while visual relevance is being improved.
 - Wholesale seller research, MOQ and wholesale-price extraction.
 - Persistent storage of searches or results.

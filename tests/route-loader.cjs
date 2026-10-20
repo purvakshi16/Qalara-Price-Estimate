@@ -8,7 +8,7 @@ function route(fetch, key = 'test-key', services = {}) {
   const compiled = stripTypeScriptTypes(source).replace(/^import .*;$/gm, '').replace(/^export /gm, '') + '\nexports.POST = POST; exports.GET = GET;';
   const exports = {};
   const wrappedFetch = async (endpoint, init) => {
-    if (new URL(endpoint).hostname === 'www.searchapi.io' && !services.passthroughSearchApi) {
+    if (new URL(endpoint).hostname === 'serpapi.com' && !services.passthroughSerpApi) {
       return Response.json({ visual_matches: [] });
     }
     return fetch(endpoint, init);
@@ -16,7 +16,7 @@ function route(fetch, key = 'test-key', services = {}) {
   vm.runInNewContext(compiled, {
     exports, fetch: wrappedFetch, Request, Response, URL, URLSearchParams, AbortSignal, console, load,
     NextResponse: Response, existsSync: fs.existsSync, readFileSync: fs.readFileSync,
-    join: require('node:path').join, process: { env: { TINYFISH_API_KEY: key, SEARCHAPI_API_KEY: 'searchapi-test-key' } },
+    join: require('node:path').join, process: { env: { TINYFISH_API_KEY: key, SERPAPI_API_KEY: 'serpapi-test-key', ...services.env } },
     uploadReference: services.uploadReference ?? (async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' })),
     deleteReference: services.deleteReference ?? (async () => undefined),
   });

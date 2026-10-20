@@ -44,15 +44,9 @@ export async function POST(request: Request) {
     const query = [input.productName.trim(), input.material?.trim(), dimensionQuery, input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
     let visualSearch: RecordValue = {};
     if (input.imageDataUrl) {
-      const searchApiKey = getSearchApiKey();
-      if (!searchApiKey) throw new Error("Set SEARCHAPI_API_KEY in the project's environment variables to use image search.");
       const uploaded = await uploadReference(input.imageDataUrl);
       cleanupReceipt = uploaded.receipt;
-      const params = new URLSearchParams({ engine: "google_lens", search_type: "visual_matches", url: uploaded.url,
-        q: [input.productName.trim(), input.material?.trim(), dimensionQuery, input.description?.trim().slice(0, 100), config.market, config.currency].filter(Boolean).join(" "),
-        country: config.location, hl: config.language,
-      });
-      visualSearch = await searchApiJson(`https://www.searchapi.io/api/v1/search?${params}`, searchApiKey, signal);
+      visualSearch = await visualSearchJson(uploaded.url, input, dimensionQuery, config, signal);
     }
     const generalParams = new URLSearchParams({ query: `${query} product detail`, location: config.location, language: config.language,
       purpose: `Find direct retail product-detail pages for ${input.productName} sold in ${config.market}. Exclude homepages, seller profiles, search pages, categories, collections, filters, wholesale pages and articles.`,
@@ -66,7 +60,7 @@ export async function POST(request: Request) {
       providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
     ]);
     const visualCandidates = records(visualSearch.visual_matches).map((row) => ({ ...row, url: text(row.link), visualMatch: true,
-      sourceImage: text(asRecord(row.image).link) || text(row.thumbnail) }))
+      sourceImage: visualResultImage(row) }))
       .filter((row) => isDirectProductUrl(text(row.url)) && !isNonPhysicalCandidate(text(asRecord(row).title))
         && isRegionCandidate(row, input.region, config.currency));
     const generalCandidates = rankedCandidates(generalSearch)
@@ -145,6 +139,53 @@ function getSearchApiKey() {
   return content.match(/SEARCHAPI_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? "";
 }
 
+function getSerpApiKey() {
+  if (process.env.SERPAPI_API_KEY) return process.env.SERPAPI_API_KEY.trim();
+  const path = join(process.cwd(), "API keys.txt");
+  if (!existsSync(path)) return "";
+  const content = readFileSync(path, "utf8");
+  return content.match(/SERPAPI_API_KEY\s*=\s*["']?([^\s"']+)/)?.[1] ?? "";
+}
+
+function imageSearchProvider() {
+  return process.env.IMAGE_SEARCH_PROVIDER?.trim().toLowerCase() === "searchapi" ? "searchapi" : "serpapi";
+}
+
+async function visualSearchJson(imageUrl: string, input: SearchRequest, dimensionQuery: string,
+  config: (typeof regions)[keyof typeof regions], signal: AbortSignal) {
+  const query = [input.productName.trim(), input.material?.trim(), dimensionQuery,
+    input.description?.trim().slice(0, 100), config.market, config.currency].filter(Boolean).join(" ");
+  if (imageSearchProvider() === "searchapi") {
+    const key = getSearchApiKey();
+    if (!key) throw new Error("Set SEARCHAPI_API_KEY to enable the disabled SearchAPI image-search implementation.");
+    const params = new URLSearchParams({ engine: "google_lens", search_type: "visual_matches", url: imageUrl,
+      q: query, country: config.location, hl: config.language });
+    return searchApiJson(`https://www.searchapi.io/api/v1/search?${params}`, key, signal);
+  }
+  const key = getSerpApiKey();
+  if (!key) throw new Error("Set SERPAPI_API_KEY in the project's environment variables to use image search.");
+  const params = new URLSearchParams({ engine: "google_lens", type: "visual_matches", url: imageUrl,
+    q: query, country: config.location.toLowerCase(), hl: config.language, api_key: key });
+  return serpApiJson(`https://serpapi.com/search.json?${params}`, signal);
+}
+
+async function serpApiJson(url: string, signal: AbortSignal): Promise<RecordValue> {
+  const response = await fetch(url, { signal, cache: "no-store" });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) throw new Error("SerpApi rejected SERPAPI_API_KEY.");
+    if (response.status === 429) throw new Error("SerpApi's free image-search allowance or rate limit was reached.");
+    throw new Error(`SerpApi image search returned HTTP ${response.status}.`);
+  }
+  try {
+    const payload = JSON.parse(await response.text()) as RecordValue;
+    if (text(payload.error)) throw new Error(`SerpApi image search failed: ${text(payload.error)}`);
+    return payload;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("SerpApi image search failed:")) throw error;
+    throw new Error("SerpApi returned an unreadable image-search response.");
+  }
+}
+
 async function searchApiJson(url: string, key: string, signal: AbortSignal): Promise<RecordValue> {
   const response = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, signal, cache: "no-store" });
   if (!response.ok) {
@@ -154,6 +195,10 @@ async function searchApiJson(url: string, key: string, signal: AbortSignal): Pro
   }
   try { return JSON.parse(await response.text()) as RecordValue; }
   catch { throw new Error("SearchApi returned an unreadable image-search response."); }
+}
+
+function visualResultImage(row: RecordValue) {
+  return text(row.image) || text(asRecord(row.image).link) || text(row.thumbnail);
 }
 
 async function providerJson(url: string, key: string, signal: AbortSignal, body?: RecordValue): Promise<RecordValue> {

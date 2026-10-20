@@ -294,15 +294,17 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
   let deletedReceipt = '';
   const api = route(async (endpoint, init) => {
     const parsed = new URL(endpoint);
-    if (parsed.hostname === 'www.searchapi.io') {
-      assert.equal(parsed.searchParams.get('search_type'), 'visual_matches');
+    if (parsed.hostname === 'serpapi.com') {
+      assert.equal(parsed.searchParams.get('type'), 'visual_matches');
       assert.match(parsed.searchParams.get('q'), /Cotton tote/);
-      return Response.json({ visual_matches: [{ link: visualUrl, title: 'Visual cotton tote', image: { link: 'https://visual-shop.example/tote.jpg' } }] });
+      assert.equal(parsed.searchParams.get('country'), 'us');
+      assert.equal(parsed.searchParams.get('api_key'), 'serpapi-test-key');
+      return Response.json({ visual_matches: [{ link: visualUrl, title: 'Visual cotton tote', image: 'https://visual-shop.example/tote.jpg' }] });
     }
     if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
     return Response.json({ results: [{ url: visualUrl, text: '<h1>Visual cotton tote</h1><p>$24.00 USD</p>' }], errors: [] });
   }, 'test-key', {
-    passthroughSearchApi: true,
+    passthroughSerpApi: true,
     uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'cleanup-receipt' }),
     deleteReference: async (receipt) => { deletedReceipt = receipt; },
   });
@@ -319,7 +321,7 @@ test('does not fetch visual listing pages or pattern candidates', async () => {
   let fetchedUrls = [];
   const api = route(async (endpoint, init) => {
     const parsed = new URL(endpoint);
-    if (parsed.hostname === 'www.searchapi.io') {
+    if (parsed.hostname === 'serpapi.com') {
       return Response.json({ visual_matches: [
         { link: 'https://www.etsy.com/market/tote_bags', title: 'Tote bags' },
         { link: 'https://patterns.example/products/free-tote', title: 'Free crochet tote pattern' },
@@ -330,7 +332,7 @@ test('does not fetch visual listing pages or pattern candidates', async () => {
     fetchedUrls = JSON.parse(init.body).urls;
     return Response.json({ results: [{ url: fetchedUrls[0], text: '<h1>Handmade tote bag</h1><p>$38.00</p>' }], errors: [] });
   }, 'test-key', {
-    passthroughSearchApi: true,
+    passthroughSerpApi: true,
     uploadReference: async () => ({ url: 'https://blob.example/reference.jpg', receipt: 'receipt' }),
     deleteReference: async () => undefined,
   });
