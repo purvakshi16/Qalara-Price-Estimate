@@ -22,7 +22,7 @@ const regions = {
 };
 const TARGET_VALID_PDPS = 6;
 const FETCH_BATCH_SIZE = 6;
-const SEARCH_BUDGET_MS = 110_000;
+const SEARCH_BUDGET_MS = 85_000;
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -82,11 +82,11 @@ export async function POST(request: Request) {
       let fetched: RecordValue;
       try {
         fetched = await providerJson("https://api.fetch.tinyfish.ai", apiKey, signal, {
-          urls: batch.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 20_000,
+          urls: batch.map((row) => text(row.url)), format: "html", image_links: true, ttl: 0, per_url_timeout_ms: 15_000,
           purpose: "Read the main retail product's current price, currency, product image and listed seller. Do not research wholesale.",
         });
       } catch (error) {
-        if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) break;
+        if (products.length || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))) break;
         throw error;
       }
       const fetchedPages = records(fetched.results);
@@ -112,6 +112,7 @@ export async function POST(request: Request) {
       currency: config.currency, displayProducts, searched,
     });
   } catch (error) {
+    console.error("Retail search request failed", error instanceof Error ? { name: error.name, message: error.message } : { message: "Unknown error" });
     const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
     return NextResponse.json({ error: timedOut ? "The free search or page fetch timed out. No paid Agent was started." : error instanceof Error ? error.message : "Retail search failed." }, { status: 502 });
   } finally {

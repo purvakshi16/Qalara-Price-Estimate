@@ -35,7 +35,7 @@ This document records the functionality intended to be active in the current pro
 
 - **Price range:** Lowest and highest retail prices across the usable PDPs returned by the search.
 - **Search diagnostics:** Shows only visual matches returned, pages successfully accessed and valid product pages found.
-- The search has a two-minute request ceiling and an internal 110-second processing budget. Results return immediately when six valid PDPs are found or candidates are exhausted.
+- The browser has a 105-second request ceiling and the backend keeps an 85-second processing budget so it can return JSON before the connection deadline. Results return immediately when six valid PDPs are found or candidates are exhausted, and already validated products are preserved if a later fetch batch fails.
 
 All usable returned products are included in the estimate. Accept, reject, Accept all and Reject all controls are not part of the production workflow.
 

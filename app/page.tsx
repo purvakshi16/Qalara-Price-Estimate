@@ -44,7 +44,7 @@ const initialForm = {
   region: "US" as Region,
 };
 
-const SEARCH_TIMEOUT_MS = 120_000;
+const SEARCH_TIMEOUT_MS = 105_000;
 
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("en", {
@@ -161,6 +161,8 @@ export default function Home() {
     } catch (searchError) {
       if (searchError instanceof DOMException && searchError.name === "AbortError") {
         setError("Search timed out while reading product pages. No paid automation was started.");
+      } else if (searchError instanceof TypeError && /failed to fetch/i.test(searchError.message)) {
+        setError("The search connection closed before the server returned results. Please retry; no paid automation was started.");
       } else {
         setError(searchError instanceof Error ? searchError.message : "Search failed.");
       }
