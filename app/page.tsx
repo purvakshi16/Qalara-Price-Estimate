@@ -7,16 +7,16 @@ type ImageSearchProvider = "searchapi" | "serpapi";
 
 type ProductResult = {
   title: string;
-  price: number;
+  price: number | null;
   currency: string;
   seller: string;
   marketplace: string;
   productUrl: string;
   imageUrl: string;
   notes: string;
-  minPrice: number;
-  maxPrice: number;
-  pageType: "PDP";
+  minPrice: number | null;
+  maxPrice: number | null;
+  pageType: "PDP" | "Visual match";
 };
 
 type SearchResponse = {
@@ -97,9 +97,9 @@ export default function Home() {
   }
 
   const estimate = useMemo(() => {
-    const products = response?.displayProducts ?? [];
-    const minimums = products.map((product) => product.minPrice ?? product.price);
-    const maximums = products.map((product) => product.maxPrice ?? product.price);
+    const products = (response?.displayProducts ?? []).filter((product) => product.price !== null);
+    const minimums = products.map((product) => product.minPrice ?? product.price).filter((value): value is number => value !== null);
+    const maximums = products.map((product) => product.maxPrice ?? product.price).filter((value): value is number => value !== null);
     const currency = response?.currency ?? ({ US: "USD", UK: "GBP", EU: "EUR", AU: "AUD" } as const)[form.region];
 
     if (!minimums.length) {
@@ -214,8 +214,8 @@ export default function Home() {
       product.seller,
       product.title,
       product.pageType,
-      product.minPrice ?? product.price,
-      product.maxPrice ?? product.price,
+      product.minPrice ?? product.price ?? "",
+      product.maxPrice ?? product.price ?? "",
       product.currency,
       product.productUrl,
       product.notes,
@@ -429,22 +429,24 @@ export default function Home() {
                 </div>
               ) : response ? (
                 <>
-                  <div className="estimate-grid one">
-                    <div className="metric">
-                      <p className="metric-label">Price range</p>
-                      <p className="metric-value">
-                        {formatMoney(estimate.min, estimate.currency)} - {formatMoney(estimate.max, estimate.currency)}
-                      </p>
-                      <p className="metric-note">From {response.displayProducts.length} valid product pages</p>
+                  {response.displayProducts.some((product) => product.price !== null) ? (
+                    <div className="estimate-grid one">
+                      <div className="metric">
+                        <p className="metric-label">Price range</p>
+                        <p className="metric-value">
+                          {formatMoney(estimate.min, estimate.currency)} - {formatMoney(estimate.max, estimate.currency)}
+                        </p>
+                        <p className="metric-note">From {response.displayProducts.filter((product) => product.price !== null).length} valid priced product pages</p>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
                   <SearchDiagnostics diagnostics={lastDiagnostics} />
 
                   <div className="results-header">
                     <div>
                       <h2 className="panel-title">Candidate Sources</h2>
-                      <p className="source-meta">Showing {response.displayProducts.length} valid product pages.</p>
+                      <p className="source-meta">Showing {response.displayProducts.length} relevant product sources. Unpriced visual matches do not affect the price range.</p>
                     </div>
                   </div>
 
@@ -532,6 +534,7 @@ function SearchDiagnostics({ diagnostics }: { diagnostics: Pick<SearchResponse, 
 }
 
 function formatProductPrice(product: ProductResult) {
+  if (product.price === null) return "Not found";
   const min = product.minPrice ?? product.price;
   const max = product.maxPrice ?? product.price;
   return min === max ? formatMoney(min, product.currency) : `${formatMoney(min, product.currency)} - ${formatMoney(max, product.currency)}`;

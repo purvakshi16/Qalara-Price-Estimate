@@ -10,9 +10,9 @@ type Dimensions = { length?: string; width?: string; height?: string; unit?: "cm
 type SearchRequest = { productName: string; description?: string; material?: string; dimensions?: Dimensions; region: Region; stage?: string; imageDataUrl?: string; imageSearchProvider?: ImageSearchProvider };
 type RecordValue = Record<string, unknown>;
 type ProductResult = {
-  title: string; price: number; currency: string; seller: string; marketplace: string;
+  title: string; price: number | null; currency: string; seller: string; marketplace: string;
   productUrl: string; imageUrl: string; notes: string;
-  minPrice: number; maxPrice: number; pageType: "PDP";
+  minPrice: number | null; maxPrice: number | null; pageType: "PDP" | "Visual match";
   matchScore: number;
 };
 const regions = {
@@ -134,8 +134,14 @@ export async function POST(request: Request) {
       pagesAccessed,
       validPagesFound: products.length,
     };
-    if (!products.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices were accessible. No paid Agent fallback was used.", searched }, { status: 422 });
-    const displayProducts = products
+    const pricedUrls = new Set(products.map((product) => product.productUrl.split("#")[0]));
+    const unpricedMatches = rankByAttributes(visualCandidates, input)
+      .filter((candidate) => !pricedUrls.has(text((candidate as RecordValue).url).split("#")[0]))
+      .map((candidate) => unpricedVisualMatch(candidate, config.currency, input))
+      .filter((product): product is ProductResult => product !== null)
+      .slice(0, Math.max(0, TARGET_VALID_PDPS - products.length));
+    if (!products.length && !unpricedMatches.length) return NextResponse.json({ error: "The product pages were checked, but no usable retail prices or relevant visual product links were accessible. No paid Agent fallback was used.", searched }, { status: 422 });
+    const displayProducts = [...products, ...unpricedMatches]
       .sort((a, b) => b.matchScore - a.matchScore)
       .map(({ matchScore: _matchScore, ...product }) => product);
     return NextResponse.json({
@@ -364,6 +370,24 @@ function extractProduct(page: RecordValue, candidate: RecordValue, currency: str
   }
   const matchScore = candidateAttributeScore({ ...candidate, title, description: content }, input);
   return { title, price, minPrice: price, maxPrice: price, currency, seller, marketplace: marketplaceName, productUrl: url, imageUrl, pageType: "PDP", notes: evidence, matchScore };
+}
+
+function unpricedVisualMatch(candidate: RecordValue, currency: string, input: SearchRequest): ProductResult | null {
+  const productUrl = text(candidate.url);
+  const title = text(candidate.title);
+  const imageUrl = text(candidate.sourceImage);
+  const description = [candidate.snippet, candidate.description].map(text).filter(Boolean).join(" ");
+  if (!productUrl || !title || !imageUrl || !passesPdpRelevance(title, description, input)) return null;
+  const marketplaceName = marketplace(productUrl);
+  let seller = "Not listed";
+  if (marketplaceName === "Seller website") {
+    try { seller = new URL(productUrl).hostname.replace(/^www\./, ""); } catch { seller = "Not listed"; }
+  }
+  return {
+    title, price: null, minPrice: null, maxPrice: null, currency, seller, marketplace: marketplaceName,
+    productUrl, imageUrl, pageType: "Visual match", notes: "Visual match. PDP price was not verified.",
+    matchScore: candidateAttributeScore(candidate, input),
+  };
 }
 
 function resolveSeller($: ReturnType<typeof load>, url: string, marketplaceName: string, current: string, content: string) {

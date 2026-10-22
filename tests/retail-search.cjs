@@ -337,6 +337,26 @@ test('prioritizes visual matches and deletes the temporary image', async () => {
   assert.equal(deletedReceipt, 'cleanup-receipt');
 });
 
+test('returns a relevant visual image and link when no retail price is available', async () => {
+  const visualUrl = 'https://visual-shop.example/products/cotton-tote-no-price';
+  const api = route(async (endpoint) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'serpapi.com') return Response.json({ visual_matches: [
+      { link: visualUrl, title: 'Cotton tote bag', image: 'https://visual-shop.example/tote.jpg' },
+    ] });
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [{ url: visualUrl, text: '<h1>Cotton tote bag</h1><p>Price unavailable</p>' }], errors: [] });
+  }, 'test-key', { passthroughSerpApi: true });
+  const response = await api.POST(request());
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.searched.validPagesFound, 0);
+  assert.equal(data.displayProducts[0].productUrl, visualUrl);
+  assert.equal(data.displayProducts[0].imageUrl, 'https://visual-shop.example/tote.jpg');
+  assert.equal(data.displayProducts[0].price, null);
+  assert.equal(data.displayProducts[0].pageType, 'Visual match');
+});
+
 test('uses SearchAPI only when it is selected for the search', async () => {
   const visualUrl = 'https://visual-shop.example/products/cotton-tote-searchapi';
   let searchApiCalls = 0;

@@ -45,6 +45,7 @@ All usable returned products are included in the estimate. Accept, reject, Accep
 Each result row contains:
 
 1. **Image:** Image extracted from that matched product's source page. It is not the image uploaded by the user. If no usable source image is found, the row shows "Not found."
+   Relevant visual-search candidates may still appear with their image and product link when no PDP price can be verified. These rows show "Not found" for price and never contribute to the Price Range.
 2. **Source item:** Product title and price-extraction note.
 3. **Marketplace:** Known platforms are labelled Amazon, eBay, Etsy or Alibaba. Independent retail domains are labelled "Seller website."
 4. **Seller:** Independent stores use the website's published site name, falling back to its domain. Known marketplaces use only an explicit shop or merchant identity from the PDP; policy and instruction text is rejected. Shows "Not listed" when a marketplace seller is unavailable.
