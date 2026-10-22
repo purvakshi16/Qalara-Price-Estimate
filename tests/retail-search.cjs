@@ -357,6 +357,50 @@ test('returns a relevant visual image and link when no retail price is available
   assert.equal(data.displayProducts[0].pageType, 'Visual match');
 });
 
+test('rejects an unpriced visual match that misses the requested design details', async () => {
+  const visualUrl = 'https://www.etsy.com/listing/1776920124/handmade-italian-marble-stone-picture';
+  const api = route(async (endpoint) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'serpapi.com') return Response.json({ visual_matches: [
+      { position: 1, link: visualUrl, title: 'Handmade Italian marble stone picture frame', snippet: 'Rectangular desktop frame', image: 'https://example.com/frame.jpg' },
+    ] });
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [], errors: [{ url: visualUrl }] });
+  }, 'test-key', { passthroughSerpApi: true });
+  const response = await api.POST(request('US', {
+    productName: 'Arched marble picture frame', description: 'Scalloped arch photo frame', material: 'Marble',
+  }));
+  assert.equal(response.status, 422);
+});
+
+test('rejects an unpriced visual match outside the top ten visual results', async () => {
+  const visualUrl = 'https://visual-shop.example/products/cotton-tote-low-rank';
+  const api = route(async (endpoint) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'serpapi.com') return Response.json({ visual_matches: [
+      { position: 14, link: visualUrl, title: 'Cotton tote bag', image: 'https://visual-shop.example/tote.jpg' },
+    ] });
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [], errors: [{ url: visualUrl }] });
+  }, 'test-key', { passthroughSerpApi: true });
+  const response = await api.POST(request());
+  assert.equal(response.status, 422);
+});
+
+test('rejects an unpriced visual match with incompatible published dimensions', async () => {
+  const visualUrl = 'https://visual-shop.example/products/cotton-tote-wrong-size';
+  const api = route(async (endpoint) => {
+    const parsed = new URL(endpoint);
+    if (parsed.hostname === 'serpapi.com') return Response.json({ visual_matches: [
+      { position: 2, link: visualUrl, title: 'Cotton tote bag 80 x 60 cm', image: 'https://visual-shop.example/tote.jpg' },
+    ] });
+    if (parsed.hostname === 'api.search.tinyfish.ai') return Response.json({ results: [] });
+    return Response.json({ results: [], errors: [{ url: visualUrl }] });
+  }, 'test-key', { passthroughSerpApi: true });
+  const response = await api.POST(request('US', { dimensions: { length: '30', width: '20', unit: 'cm' } }));
+  assert.equal(response.status, 422);
+});
+
 test('uses SearchAPI only when it is selected for the search', async () => {
   const visualUrl = 'https://visual-shop.example/products/cotton-tote-searchapi';
   let searchApiCalls = 0;

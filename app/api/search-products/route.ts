@@ -66,8 +66,8 @@ export async function POST(request: Request) {
         return {};
       }) : Promise.resolve({}),
     ]);
-    const visualCandidates = records(visualSearch.visual_matches).map((row) => ({ ...row, url: text(row.link), visualMatch: true,
-      sourceImage: visualResultImage(row) }))
+    const visualCandidates = records(visualSearch.visual_matches).map((row, index) => ({ ...row, url: text(row.link), visualMatch: true,
+      position: positiveNumber(row.position) ?? index + 1, sourceImage: visualResultImage(row) }))
       .filter((row) => isDirectProductUrl(text(row.url)) && !isNonPhysicalCandidate(text(asRecord(row).title))
         && isRegionCandidate(row, input.region, config.currency));
     const generalCandidates = rankedCandidates(generalSearch)
@@ -377,7 +377,7 @@ function unpricedVisualMatch(candidate: RecordValue, currency: string, input: Se
   const title = text(candidate.title);
   const imageUrl = text(candidate.sourceImage);
   const description = [candidate.snippet, candidate.description].map(text).filter(Boolean).join(" ");
-  if (!productUrl || !title || !imageUrl || !passesPdpRelevance(title, description, input)) return null;
+  if (!productUrl || !title || !imageUrl || !passesUnpricedVisualRelevance(candidate, input)) return null;
   const marketplaceName = marketplace(productUrl);
   let seller = "Not listed";
   if (marketplaceName === "Seller website") {
@@ -388,6 +388,51 @@ function unpricedVisualMatch(candidate: RecordValue, currency: string, input: Se
     productUrl, imageUrl, pageType: "Visual match", notes: "Visual match. PDP price was not verified.",
     matchScore: candidateAttributeScore(candidate, input),
   };
+}
+
+function passesUnpricedVisualRelevance(candidate: RecordValue, input: SearchRequest) {
+  const position = positiveNumber(candidate.position);
+  if (position === null || position > 10) return false;
+
+  const haystack = [candidate.title, candidate.snippet, candidate.description].map(text).filter(Boolean).join(" ");
+  const pageTokens = meaningfulTokens(haystack);
+  const nameTokens = meaningfulTokens(input.productName);
+  const matchedNameTokens = nameTokens.filter((token) => tokenMatch(token, pageTokens)).length;
+  const minimumNameMatches = nameTokens.length <= 1 ? nameTokens.length : Math.max(2, Math.ceil(nameTokens.length * 0.6));
+  if (matchedNameTokens < minimumNameMatches) return false;
+
+  const materialOptions = (input.material ?? "").split(/[,/|]+/)
+    .map((value) => meaningfulTokens(value)).filter((tokens) => tokens.length);
+  if (materialOptions.length && !materialOptions.some((option) => option.every((token) => tokenMatch(token, pageTokens)))) return false;
+
+  const excluded = new Set([...nameTokens, ...materialOptions.flat()]);
+  const descriptionTokens = meaningfulDescriptionTokens(input.description ?? "").filter((token) => !excluded.has(token));
+  const matchedDescriptionTokens = descriptionTokens.filter((token) => tokenMatch(token, pageTokens)).length;
+  const minimumDescriptionMatches = descriptionTokens.length ? Math.min(2, Math.ceil(descriptionTokens.length * 0.5)) : 0;
+  if (matchedDescriptionTokens < minimumDescriptionMatches) return false;
+
+  return dimensionsAreCompatible(haystack, input.dimensions);
+}
+
+function dimensionsAreCompatible(value: string, dimensions?: Dimensions) {
+  const requested = [dimensions?.length, dimensions?.width, dimensions?.height]
+    .map((entry) => positiveNumber(entry)).filter((entry): entry is number => entry !== null);
+  if (requested.length < 2) return true;
+  const published = [...value.matchAll(/(\d+(?:\.\d+)?)\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)(?:\s*(?:x|×|by)\s*(\d+(?:\.\d+)?))?\s*(cm|centimet(?:er|re)s?|in|inch(?:es)?|\")/gi)];
+  if (!published.length) return true;
+  return published.some((match) => {
+    const factor = /^cm|centimet/i.test(match[4]) ? 1 : 2.54;
+    const actual = [match[1], match[2], match[3]].filter(Boolean).map((entry) => Number(entry) * factor).sort((a, b) => a - b);
+    const expectedFactor = dimensions?.unit === "in" ? 2.54 : 1;
+    const expected = requested.map((entry) => entry * expectedFactor).sort((a, b) => a - b);
+    const comparisons = Math.min(actual.length, expected.length);
+    return comparisons >= 2 && actual.slice(0, comparisons).every((entry, index) => Math.abs(entry - expected[index]) / Math.max(expected[index], 1) <= 0.25);
+  });
+}
+
+function positiveNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(text(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function resolveSeller($: ReturnType<typeof load>, url: string, marketplaceName: string, current: string, content: string) {

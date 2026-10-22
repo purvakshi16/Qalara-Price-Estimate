@@ -1,6 +1,6 @@
 # Market Price Estimator: Production Features
 
-Last updated: 20 October 2026
+Last updated: 22 October 2026
 
 This document records the functionality intended to be active in the current production application. It should be updated alongside every production-facing feature change.
 
@@ -45,7 +45,7 @@ All usable returned products are included in the estimate. Accept, reject, Accep
 Each result row contains:
 
 1. **Image:** Image extracted from that matched product's source page. It is not the image uploaded by the user. If no usable source image is found, the row shows "Not found."
-   Relevant visual-search candidates may still appear with their image and product link when no PDP price can be verified. These rows show "Not found" for price and never contribute to the Price Range.
+   Relevant visual-search candidates may still appear with their image and product link when no PDP price can be verified. These rows show "Not found" for price and never contribute to the Price Range. An unpriced row must be within the first ten visual results, satisfy a stronger product-name match, match supplied material and distinctive description details, and agree with supplied dimensions when its search text publishes dimensions.
 2. **Source item:** Product title and price-extraction note.
 3. **Marketplace:** Known platforms are labelled Amazon, eBay, Etsy or Alibaba. Independent retail domains are labelled "Seller website."
 4. **Seller:** Independent stores use the website's published site name, falling back to its domain. Known marketplaces use only an explicit shop or merchant identity from the PDP; policy and instruction text is rejected. Shows "Not listed" when a marketplace seller is unavailable.
@@ -69,3 +69,5 @@ The Source item title is the direct link to the matched retail product page; the
 
 - Wholesale seller research, MOQ and wholesale-price extraction.
 - Persistent storage of searches or results.
+
+The complete operational rules and thresholds are maintained in `SEARCH-LOGIC.md`. This feature list is the shorter production summary.
