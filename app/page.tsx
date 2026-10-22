@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 
 type Region = "UK" | "US" | "EU" | "AU";
 type ImageSearchProvider = "searchapi" | "serpapi";
@@ -66,6 +66,7 @@ function fileToDataUrl(file: File) {
 }
 
 export default function Home() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(initialForm);
   const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
   const [imagePreview, setImagePreview] = useState("");
@@ -76,6 +77,24 @@ export default function Home() {
   const [searchProgress, setSearchProgress] = useState("");
   const [lastDiagnostics, setLastDiagnostics] = useState<Pick<SearchResponse, "searched"> | null>(null);
   const [searchStarted, setSearchStarted] = useState(false);
+
+  function resetImage() {
+    setUploadedImage(null);
+    setImagePreview("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function resetAll() {
+    setForm(initialForm);
+    resetImage();
+    setResponse(null);
+    setLastDiagnostics(null);
+    setSearchStarted(false);
+    setLoading(false);
+    setError("");
+    setSearchProgress("");
+    setDownloadOpen(false);
+  }
 
   const estimate = useMemo(() => {
     const products = response?.displayProducts ?? [];
@@ -254,12 +273,18 @@ export default function Home() {
         <div className={`workspace${searchStarted ? "" : " entry-only"}`}>
           <section className="panel input-panel">
             <div className="panel-header">
-              <h2 className="panel-title">Product Details</h2>
+              <div className="panel-title-row">
+                <h2 className="panel-title">Product Details</h2>
+                <button className="reset-all" type="button" onClick={resetAll} disabled={loading}>Reset all</button>
+              </div>
             </div>
             <div className="panel-body">
               <form className="form-grid" onSubmit={runSearch}>
                 <div className="field">
-                  <label htmlFor="productName">Product name <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
+                  <div className="field-heading">
+                    <label htmlFor="productName">Product name <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
+                    <button className="field-reset" type="button" onClick={() => setForm({ ...form, productName: "" })} disabled={!form.productName || loading}>Reset</button>
+                  </div>
                   <input
                     id="productName"
                     value={form.productName}
@@ -269,7 +294,10 @@ export default function Home() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="description">Description</label>
+                  <div className="field-heading">
+                    <label htmlFor="description">Description</label>
+                    <button className="field-reset" type="button" onClick={() => setForm({ ...form, description: "" })} disabled={!form.description || loading}>Reset</button>
+                  </div>
                   <textarea
                     id="description"
                     value={form.description}
@@ -278,7 +306,10 @@ export default function Home() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="material">Material</label>
+                  <div className="field-heading">
+                    <label htmlFor="material">Material</label>
+                    <button className="field-reset" type="button" onClick={() => setForm({ ...form, material: "" })} disabled={!form.material || loading}>Reset</button>
+                  </div>
                   <input
                     id="material"
                     value={form.material}
@@ -287,7 +318,11 @@ export default function Home() {
                   />
                 </div>
                 <fieldset className="field dimension-field">
-                  <legend>Product dimensions</legend>
+                  <legend>
+                    <span>Product dimensions</span>
+                    <button className="field-reset" type="button" onClick={() => setForm({ ...form, dimensionLength: "", dimensionWidth: "", dimensionHeight: "", dimensionUnit: "cm" })}
+                      disabled={(!form.dimensionLength && !form.dimensionWidth && !form.dimensionHeight && form.dimensionUnit === "cm") || loading}>Reset</button>
+                  </legend>
                   <div className="dimension-grid">
                     <label>
                       <input type="number" min="0" step="any" inputMode="decimal" value={form.dimensionLength}
@@ -314,8 +349,11 @@ export default function Home() {
                   </div>
                 </fieldset>
                 <div className="field">
-                  <label htmlFor="productImages">Upload image <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
-                  <input id="productImages" type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => handleImageChange(event.target.files)} />
+                  <div className="field-heading">
+                    <label htmlFor="productImages">Upload image <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
+                    <button className="field-reset" type="button" onClick={resetImage} disabled={!uploadedImage || loading}>Reset</button>
+                  </div>
+                  <input ref={fileInputRef} id="productImages" type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => handleImageChange(event.target.files)} />
                   <div className="image-preview-grid" aria-live="polite">
                     {imagePreview ? (
                       <>
@@ -329,7 +367,10 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="field">
-                  <label htmlFor="region">Region</label>
+                  <div className="field-heading">
+                    <label htmlFor="region">Region</label>
+                    <button className="field-reset" type="button" onClick={() => setForm({ ...form, region: initialForm.region })} disabled={form.region === initialForm.region || loading}>Reset</button>
+                  </div>
                   <select id="region" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value as Region })}>
                     <option value="AU">Australia - AUD</option>
                     <option value="EU">Europe - EUR</option>
@@ -338,7 +379,11 @@ export default function Home() {
                   </select>
                 </div>
                 <fieldset className="field provider-field">
-                  <legend>Image search provider</legend>
+                  <legend>
+                    <span>Image search provider</span>
+                    <button className="field-reset" type="button" onClick={() => setForm({ ...form, imageSearchProvider: initialForm.imageSearchProvider })}
+                      disabled={form.imageSearchProvider === initialForm.imageSearchProvider || loading}>Reset</button>
+                  </legend>
                   <div className="provider-options">
                     <label>
                       <input type="radio" name="imageSearchProvider" value="searchapi"

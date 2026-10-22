@@ -125,6 +125,47 @@ a {
   font-size: 16px;
 }
 
+.panel-title-row,
+.field-heading,
+.dimension-field legend,
+.provider-field legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.reset-all,
+.field-reset {
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.reset-all:hover,
+.field-reset:hover {
+  color: var(--danger);
+}
+
+.reset-all:focus-visible,
+.field-reset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.reset-all:disabled,
+.field-reset:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 .panel-body {
   padding: 18px;
 }
@@ -186,6 +227,12 @@ a {
   color: #3b4038;
   font-size: 13px;
   font-weight: 700;
+}
+
+.dimension-field legend .field-reset,
+.provider-field legend .field-reset {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .provider-field {
