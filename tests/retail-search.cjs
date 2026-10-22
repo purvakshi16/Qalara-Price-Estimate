@@ -23,50 +23,14 @@ function provider(html, options = {}) {
   return { api: route(fetch), calls };
 }
 
-test('allows a product-name-only search without calling image search', async () => {
+test('requires a product image', async () => {
   const { api, calls } = provider('<h1>Cotton tote</h1><p>$19.99</p>');
   const response = await api.POST(new Request('https://app.example/api/search-products', {
     method: 'POST', body: JSON.stringify({ productName: 'Cotton tote', region: 'US' }),
   }));
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls, ['api.search.tinyfish.ai', 'api.search.tinyfish.ai', 'api.fetch.tinyfish.ai']);
-});
-
-test('requires either a product name or a product image', async () => {
-  const { api, calls } = provider('<h1>Cotton tote</h1><p>$19.99</p>');
-  const response = await api.POST(new Request('https://app.example/api/search-products', {
-    method: 'POST', body: JSON.stringify({ productName: '', region: 'US' }),
-  }));
   assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /product name or upload a product image/i);
+  assert.match((await response.json()).error, /image is required/i);
   assert.equal(calls.length, 0);
-});
-
-test('allows an image-only search and skips text discovery', async () => {
-  const productUrl = 'https://visual-shop.example/products/woven-bag';
-  let textSearchCalls = 0;
-  let imageSearchCalls = 0;
-  const api = route(async (endpoint, init) => {
-    const parsed = new URL(endpoint);
-    if (parsed.hostname === 'serpapi.com') {
-      imageSearchCalls += 1;
-      return Response.json({ visual_matches: [
-        { position: 1, link: productUrl, title: 'Woven shoulder bag', image: 'https://visual-shop.example/bag.jpg' },
-      ] });
-    }
-    if (parsed.hostname === 'api.search.tinyfish.ai') {
-      textSearchCalls += 1;
-      return Response.json({ results: [] });
-    }
-    assert.equal(parsed.hostname, 'api.fetch.tinyfish.ai');
-    assert.deepEqual(JSON.parse(init.body).urls, [productUrl]);
-    return Response.json({ results: [{ url: productUrl, text: '<h1>Woven shoulder bag</h1><p>$35.00</p>' }], errors: [] });
-  }, 'test-key', { passthroughSerpApi: true });
-  const response = await api.POST(request('US', { productName: '', imageSearchProvider: 'serpapi' }));
-  assert.equal(response.status, 200);
-  assert.equal(imageSearchCalls, 1);
-  assert.equal(textSearchCalls, 0);
-  assert.equal((await response.json()).displayProducts[0].price, 35);
 });
 
 test('extracts a single requested-currency price from primary PDP text', async () => {

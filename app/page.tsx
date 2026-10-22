@@ -130,8 +130,8 @@ export default function Home() {
 
   async function runSearch(event: FormEvent) {
     event.preventDefault();
-    if (!form.productName.trim() && !uploadedImage) {
-      setError("Enter a product name or upload a product image before searching.");
+    if (!uploadedImage) {
+      setError("Upload a product image before searching.");
       return;
     }
     setError("");
@@ -282,7 +282,7 @@ export default function Home() {
               <form className="form-grid" onSubmit={runSearch}>
                 <div className="field">
                   <div className="field-heading">
-                    <label htmlFor="productName">Product name</label>
+                    <label htmlFor="productName">Product name <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                     <button className="field-reset" type="button" onClick={() => setForm({ ...form, productName: "" })} disabled={!form.productName || loading}>Reset</button>
                   </div>
                   <input
@@ -290,6 +290,7 @@ export default function Home() {
                     value={form.productName}
                     onChange={(event) => setForm({ ...form, productName: event.target.value })}
                     placeholder="Tote bag"
+                    required
                   />
                 </div>
                 <div className="field">
@@ -349,10 +350,10 @@ export default function Home() {
                 </fieldset>
                 <div className="field">
                   <div className="field-heading">
-                    <label htmlFor="productImages">Upload image</label>
+                    <label htmlFor="productImages">Upload image <span className="required-mark" aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                     <button className="field-reset" type="button" onClick={resetImage} disabled={!uploadedImage || loading}>Reset</button>
                   </div>
-                  <input ref={fileInputRef} id="productImages" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => handleImageChange(event.target.files)} />
+                  <input ref={fileInputRef} id="productImages" type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => handleImageChange(event.target.files)} />
                   <div className="image-preview-grid" aria-live="polite">
                     {imagePreview ? (
                       <>
@@ -403,7 +404,7 @@ export default function Home() {
                     {error}
                   </p>
                 ) : null}
-                <button className="btn" disabled={loading || (!form.productName.trim() && !uploadedImage)} type="submit">
+                <button className="btn" disabled={loading || !form.productName.trim() || !uploadedImage} type="submit">
                   {loading ? (
                     <><span className="loading-spinner button-spinner" aria-hidden="true" />Searching products...</>
                   ) : "Find Similar Items"}
