@@ -34,9 +34,12 @@ export async function POST(request: Request) {
     const deadline = Date.now() + SEARCH_BUDGET_MS;
     const input = await request.json() as SearchRequest;
     if (input.stage === "wholesale") return NextResponse.json({ error: "Wholesale lookup is paused." }, { status: 400 });
-    if (typeof input.productName !== "string" || !input.productName.trim()) return NextResponse.json({ error: "Product name is required." }, { status: 400 });
-    if (typeof input.imageDataUrl !== "string" || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(input.imageDataUrl)) {
-      return NextResponse.json({ error: "A JPEG, PNG or WebP product image is required." }, { status: 400 });
+    input.productName = text(input.productName);
+    const imageDataUrl = text(input.imageDataUrl);
+    const hasImage = Boolean(imageDataUrl);
+    if (!input.productName && !hasImage) return NextResponse.json({ error: "Enter a product name or upload a product image." }, { status: 400 });
+    if (hasImage && !/^data:image\/(?:jpeg|png|webp);base64,/i.test(imageDataUrl)) {
+      return NextResponse.json({ error: "The product image must be JPEG, PNG or WebP." }, { status: 400 });
     }
     const config = regions[input.region] ?? regions.US;
     const apiKey = getApiKey();
@@ -46,8 +49,8 @@ export async function POST(request: Request) {
     const dimensionQuery = dimensionText(input.dimensions);
     const query = [input.productName.trim(), input.material?.trim(), dimensionQuery, input.description?.trim().slice(0, 150), config.currency, "retail price"].filter(Boolean).join(" ");
     let visualSearch: RecordValue = {};
-    if (input.imageDataUrl) {
-      const uploaded = await uploadReference(input.imageDataUrl);
+    if (hasImage) {
+      const uploaded = await uploadReference(imageDataUrl);
       cleanupReceipt = uploaded.receipt;
       visualSearch = await visualSearchJson(uploaded.url, input, dimensionQuery, config, signal);
     }
@@ -58,10 +61,11 @@ export async function POST(request: Request) {
     const marketplaceParams = new URLSearchParams({ query: marketplaceQuery, location: config.location, language: config.language,
       purpose: `Find direct product-detail pages for ${input.productName} on Amazon, Etsy, eBay or Alibaba in ${config.market}. Exclude marketplace search, category, filter and collection pages.`,
     });
+    const hasProductName = Boolean(input.productName);
     const [generalSearch, marketplaceSearch, firecrawlSearch] = await Promise.all([
-      providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal),
-      providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal),
-      firecrawlKey ? firecrawlSearchJson(query, config, firecrawlKey, signal).catch((error) => {
+      hasProductName ? providerJson(`https://api.search.tinyfish.ai?${generalParams}`, apiKey, signal) : Promise.resolve({}),
+      hasProductName ? providerJson(`https://api.search.tinyfish.ai?${marketplaceParams}`, apiKey, signal) : Promise.resolve({}),
+      hasProductName && firecrawlKey ? firecrawlSearchJson(query, config, firecrawlKey, signal).catch((error) => {
         console.warn("Firecrawl discovery was skipped after an error", safeError(error));
         return {};
       }) : Promise.resolve({}),

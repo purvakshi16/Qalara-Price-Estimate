@@ -115,7 +115,7 @@ for index, value in enumerate(("Area", "Current behavior")):
         run.font.bold = True
         run.font.color.rgb = RGBColor(255, 255, 255)
 rows = [
-    ("Inputs", "Required product name and image; optional description, material and dimensions; required region and selected image-search provider."),
+    ("Inputs", "Product name or image is required; either may be used alone or together. Description, material and dimensions are optional. Region is required."),
     ("Outputs", "Up to six direct product results with source image, linked product title, PDP price when verified, marketplace and seller."),
     ("Summary", "Price Range uses verified priced PDPs only. Diagnostics show visual matches returned, pages accessed and valid priced PDPs found."),
     ("Providers", "Selected SearchAPI or SerpApi for visual discovery; TinyFish for text discovery and page reading; limited Firecrawl discovery and fetch recovery when configured."),

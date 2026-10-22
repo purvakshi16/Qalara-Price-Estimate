@@ -6,17 +6,18 @@ This is the canonical implementation rulebook for the production application. It
 
 ## 1 Input Contract
 
-- Product name is required and must contain non-whitespace text.
-- One JPEG, PNG or WebP image is required. The current upload limit is 2 MB.
+- Product name is optional when an image is supplied. When entered, it must contain non-whitespace text.
+- One JPEG, PNG or WebP image is optional when a product name is supplied. The current upload limit is 2 MB.
+- At least one primary search input is required: product name or image. Both may be supplied together.
 - Description is optional and supplies shape, design, finish, use and pack-size evidence.
 - Material is optional. Comma, slash or vertical-bar separated values are treated as alternatives.
 - Dimensions are optional structured length, width and height values. Unit is centimetres or inches.
 - Region is required. Supported choices are United States USD, United Kingdom GBP, Europe EUR using Germany as the locale, and Australia AUD. United States USD is the default.
-- The image-search provider is chosen per search. SearchAPI and SerpApi are available; only the selected provider is called.
+- The image-search provider is chosen per search. SearchAPI and SerpApi are available; only the selected provider is called, and neither is called during a product-name-only search.
 
 ## 2 Temporary Image Handling
 
-1. The browser converts the selected image to a data URL and sends it with the form.
+1. When an image is selected, the browser converts it to a data URL and sends it with the form.
 2. The API validates its media type.
 3. The image is uploaded to the connected public Vercel Blob store because reverse-image providers need a reachable URL.
 4. The Blob receipt is retained only for cleanup.
@@ -34,8 +35,9 @@ This is the canonical implementation rulebook for the production application. It
 ## 4 Discovery Providers
 
 - The selected visual provider returns visual matches. Provider position is preserved; when absent, array order becomes the position.
-- TinyFish runs one general text search and one marketplace-specific text search in parallel.
-- When configured, Firecrawl runs one additional text discovery search.
+- TinyFish runs one general text search and one marketplace-specific text search in parallel when a product name is supplied.
+- When configured, Firecrawl runs one additional text discovery search when a product name is supplied.
+- A product-name-only search skips Blob upload and visual search. An image-only search skips TinyFish and Firecrawl text discovery but still uses TinyFish, with limited Firecrawl recovery, to read candidate PDPs. Supplying both combines both candidate sets.
 - SearchAPI and SerpApi are alternatives, not automatic fallbacks. This prevents an unexpected second image-search credit charge.
 - TinyFish is the primary PDP reader. Firecrawl basic-proxy scraping is attempted for at most two selected pages omitted by TinyFish.
 - Paid browser-agent fallback is disabled.
@@ -148,7 +150,7 @@ Accepted unpriced rows show `Not found` for price, use the provider image, link 
 
 ## 15 Error and Empty States
 
-- Missing product name or image returns a validation error before provider calls.
+- Missing both product name and image returns a validation error before provider calls.
 - No direct candidate URLs returns a specific no-links error.
 - No priced or qualifying unpriced result returns a no-usable-results error and includes diagnostics.
 - Provider allowance, authentication and request failures are surfaced as errors. They do not start a paid fallback.

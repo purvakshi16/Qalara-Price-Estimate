@@ -6,11 +6,12 @@ This document records the functionality intended to be active in the current pro
 
 ## Product Search Inputs
 
-- **Product name:** Required. Supplies the main retail search phrase.
+- **Product name:** Optional when an image is supplied. Supplies the main text-search phrase.
 - **Description:** Optional. Adds product characteristics such as finish, shape, use case and pack size.
 - **Material:** Optional. Narrows the search to the requested material.
 - **Product dimensions:** Optional structured length, width and height fields with centimetre or inch units. Enter only known finished-product dimensions.
-- **Image:** One JPEG, PNG or WebP image up to 2 MB is required. The user chooses SearchAPI or SerpApi for the Google Lens visual-match search before submitting; SearchAPI is selected by default. Only the chosen provider is called and its candidates receive first priority.
+- **Image:** Optional when a product name is supplied. Accepts one JPEG, PNG or WebP image up to 2 MB. The user chooses SearchAPI or SerpApi for the Google Lens visual-match search before submitting; SearchAPI is selected by default. Only the chosen provider is called and its candidates receive first priority.
+- At least one primary input is required: product name or image. Name-only searches skip image upload and reverse-image search. Image-only searches skip general and marketplace text discovery. Supplying both combines the two discovery paths.
 - The image is temporarily uploaded to public Vercel Blob storage so the visual-search provider can read it, then deleted in the API route's `finally` cleanup whether the search succeeds or fails.
 - Product name, description, optional material and optional dimensions are sent alongside the image to improve visual-match relevance. Colour differences are allowed; material and dimensions only influence the search when entered.
 - **Region and currency:** US - USD is the default. UK - GBP, EU - EUR (Germany) and Australia - AUD are also available.
